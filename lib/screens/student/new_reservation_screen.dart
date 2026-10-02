@@ -6,6 +6,7 @@ import '../../models/reservation_item.dart';
 import '../../services/inventory_service.dart';
 import '../../services/laboratory_service.dart';
 import '../../services/reservation_service.dart';
+import '../../features/reservations/domain/reservation_repository.dart';
 import '../../theme/app_theme.dart';
 
 class NewReservationScreen extends StatefulWidget {
@@ -40,7 +41,7 @@ class _NewReservationScreenState extends State<NewReservationScreen> {
 
   final _inventoryService = InventoryService();
   final _labService = LaboratoryService();
-  final _reservationService = ReservationService();
+  final ReservationRepository _reservationService = ReservationService();
 
   List<Laboratory> _labs = [];
   List<EquipmentType> _typesForLab = [];

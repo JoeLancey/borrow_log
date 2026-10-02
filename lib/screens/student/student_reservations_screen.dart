@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/reservation.dart';
 import '../../services/reservation_service.dart';
+import '../../features/reservations/domain/reservation_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/borrow_log_states.dart';
 import 'new_reservation_screen.dart';
@@ -16,8 +17,19 @@ class StudentReservationsScreen extends StatefulWidget {
 
 class _StudentReservationsScreenState
     extends State<StudentReservationsScreen> {
-  final _service = ReservationService();
+  final ReservationRepository _service = ReservationService();
   late Future<List<Reservation>> _future;
+  String _statusFilter = 'all';
+  bool _newestFirst = true;
+
+  static const _filters = [
+    ('all', 'All'),
+    ('pending', 'Pending'),
+    ('approved', 'Approved'),
+    ('borrowed', 'Borrowed'),
+    ('overdue', 'Overdue'),
+    ('completed', 'Completed'),
+  ];
 
   @override
   void initState() {
@@ -77,6 +89,22 @@ class _StudentReservationsScreenState
       appBar: AppBar(
         title: const Text('My Reservations'),
         actions: [
+          PopupMenuButton<bool>(
+            tooltip: 'Sort reservations',
+            initialValue: _newestFirst,
+            onSelected: (newestFirst) =>
+                setState(() => _newestFirst = newestFirst),
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: true,
+                child: Text('Newest first'),
+              ),
+              PopupMenuItem(
+                value: false,
+                child: Text('Oldest first'),
+              ),
+            ],
+          ),
           IconButton(
             tooltip: 'New reservation',
             icon: const Icon(Icons.add),
@@ -98,15 +126,64 @@ class _StudentReservationsScreenState
           }
           final list = snap.data ?? [];
           if (list.isEmpty) return _emptyView();
+          final visible = _visibleReservations(list);
           return RefreshIndicator(
             onRefresh: _refresh,
-            child: ListView.builder(
+            child: ListView(
               padding: const EdgeInsets.all(12),
-              itemCount: list.length,
-              itemBuilder: (_, i) => _card(list[i]),
+              children: [
+                _filterBar(),
+                if (visible.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(32),
+                    child: Text(
+                      'No reservations match this filter.',
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                else
+                  ...visible.map(_card),
+              ],
             ),
           );
         },
+      ),
+    );
+  }
+
+  List<Reservation> _visibleReservations(List<Reservation> reservations) {
+    final visible = reservations.where((reservation) {
+      if (_statusFilter == 'all') return true;
+      if (_statusFilter == 'overdue') return reservation.isOverdue;
+      return reservation.status == _statusFilter;
+    }).toList();
+
+    visible.sort((a, b) {
+      final aDate = a.createdAt ?? a.useDate;
+      final bDate = b.createdAt ?? b.useDate;
+      final result = aDate.compareTo(bDate);
+      return _newestFirst ? -result : result;
+    });
+    return visible;
+  }
+
+  Widget _filterBar() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (final filter in _filters) ...[
+              ChoiceChip(
+                label: Text(filter.$2),
+                selected: _statusFilter == filter.$1,
+                onSelected: (_) => setState(() => _statusFilter = filter.$1),
+              ),
+              const SizedBox(width: 8),
+            ],
+          ],
+        ),
       ),
     );
   }

@@ -6,6 +6,7 @@ import '../../models/laboratory.dart';
 import '../../services/inventory_service.dart';
 import '../../services/laboratory_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/borrow_log_app_bar.dart';
 import '../../widgets/borrow_log_states.dart';
 import 'add_equipment_type_screen.dart';
 import 'add_equipment_asset_screen.dart';
@@ -245,10 +246,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_selectMode
+      appBar: BorrowLogAppBar(
+        title: _selectMode
             ? '${_selected.length} selected'
-            : 'Equipment Inventory'),
+          : 'Inventory',
         leading: _selectMode
             ? IconButton(
                 icon: const Icon(Icons.close),
@@ -369,76 +370,37 @@ class _InventoryScreenState extends State<InventoryScreen> {
           onChanged: (value) => setState(() => _searchQuery = value),
         ),
         const SizedBox(height: 8),
-        SizedBox(
-          height: 42,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: _statusFilters.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 8),
-            itemBuilder: (context, index) {
-              final status = _statusFilters[index];
-              final label = status == null
-                  ? 'All statuses'
-                  : status[0].toUpperCase() + status.substring(1);
-              final selected = _statusFilter == status;
-
-              return FilterChip(
-                label: Text(label),
-                selected: selected,
-                showCheckmark: true,
-                selectedColor: AppTheme.maroon,
-                checkmarkColor: Colors.white,
-                labelStyle: TextStyle(
-                  color: selected ? Colors.white : null,
-                  fontWeight: FontWeight.w600,
-                ),
-                onSelected: (_) => setState(() => _statusFilter = status),
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: 8),
-        if (departments.isNotEmpty)
-          SizedBox(
-            height: 42,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: departments.length + 1,
-              separatorBuilder: (_, _) => const SizedBox(width: 8),
-              itemBuilder: (context, index) {
-                if (index == 0) {
-                  final selected = _departmentFilter == null;
-                  return FilterChip(
-                    label: const Text('All'),
-                    selected: selected,
-                    showCheckmark: true,
-                    selectedColor: AppTheme.maroon,
-                    checkmarkColor: Colors.white,
-                    labelStyle: TextStyle(
-                      color: selected ? Colors.white : null,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    onSelected: (_) => setState(() => _departmentFilter = null),
-                  );
-                }
-
-                final dept = departments[index - 1];
-                final selected = _departmentFilter == dept;
-                return FilterChip(
-                  label: Text(dept),
-                  selected: selected,
-                  showCheckmark: true,
-                  selectedColor: AppTheme.maroon,
-                  checkmarkColor: Colors.white,
-                  labelStyle: TextStyle(
-                    color: selected ? Colors.white : null,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  onSelected: (_) => setState(() => _departmentFilter = dept),
-                );
-              },
+        Row(
+          children: [
+            OutlinedButton.icon(
+              onPressed: () => _showFilterSheet(departments),
+              icon: const Icon(Icons.tune, size: 18),
+              label: Text(_activeFilterCount == 0
+                  ? 'Filters'
+                  : 'Filters ($_activeFilterCount)'),
             ),
-          ),
+            if (_activeFilterCount > 0) ...[
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: () => setState(() {
+                  _statusFilter = null;
+                  _departmentFilter = null;
+                }),
+                child: const Text('Clear'),
+              ),
+            ],
+            const Spacer(),
+            if (_activeFilterCount > 0)
+              Flexible(
+                child: Text(
+                  _filterSummary,
+                  textAlign: TextAlign.end,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+          ],
+        ),
         if (filteredLabs.isEmpty)
           const Padding(
             padding: EdgeInsets.all(32),
@@ -469,6 +431,35 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
   bool _matchesStatus(EquipmentAsset asset) =>
       _statusFilter == null || asset.status == _statusFilter;
+
+  int get _activeFilterCount =>
+      (_statusFilter == null ? 0 : 1) + (_departmentFilter == null ? 0 : 1);
+
+  String get _filterSummary {
+    final values = <String>[];
+    if (_statusFilter != null) {
+      values.add(_statusFilter![0].toUpperCase() + _statusFilter!.substring(1));
+    }
+    if (_departmentFilter != null) values.add(_departmentFilter!);
+    return values.join(' · ');
+  }
+
+  Future<void> _showFilterSheet(List<String> departments) async {
+    final result = await showModalBottomSheet<_InventoryFilters>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => _InventoryFilterSheet(
+        departments: departments,
+        status: _statusFilter,
+        department: _departmentFilter,
+      ),
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      _statusFilter = result.status;
+      _departmentFilter = result.department;
+    });
+  }
 
   Widget _labSection(
     Laboratory lab,
@@ -803,6 +794,125 @@ class _InventoryScreenState extends State<InventoryScreen> {
     'lost',
     'maintenance',
   ];
+}
+
+class _InventoryFilters {
+  const _InventoryFilters({this.status, this.department});
+
+  final String? status;
+  final String? department;
+}
+
+class _InventoryFilterSheet extends StatefulWidget {
+  const _InventoryFilterSheet({
+    required this.departments,
+    required this.status,
+    required this.department,
+  });
+
+  final List<String> departments;
+  final String? status;
+  final String? department;
+
+  @override
+  State<_InventoryFilterSheet> createState() => _InventoryFilterSheetState();
+}
+
+class _InventoryFilterSheetState extends State<_InventoryFilterSheet> {
+  static const _all = '__all__';
+  late String _status;
+  late String _department;
+
+  @override
+  void initState() {
+    super.initState();
+    _status = widget.status ?? _all;
+    _department = widget.department ?? _all;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final statuses = [
+      _all,
+      ..._InventoryScreenState._statusFilters.whereType<String>(),
+    ];
+    final departments = [_all, ...widget.departments];
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Filter inventory',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Close',
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              initialValue: _status,
+              decoration: const InputDecoration(
+                labelText: 'Status',
+                prefixIcon: Icon(Icons.label_outline),
+              ),
+              items: statuses
+                  .map((value) => DropdownMenuItem(
+                        value: value,
+                        child: Text(value == _all
+                            ? 'All statuses'
+                            : value[0].toUpperCase() + value.substring(1)),
+                      ))
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) setState(() => _status = value);
+              },
+            ),
+            const SizedBox(height: 14),
+            DropdownButtonFormField<String>(
+              initialValue: _department,
+              decoration: const InputDecoration(
+                labelText: 'Department',
+                prefixIcon: Icon(Icons.account_balance_outlined),
+              ),
+              items: departments
+                  .map((value) => DropdownMenuItem(
+                        value: value,
+                        child: Text(value == _all ? 'All departments' : value),
+                      ))
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) setState(() => _department = value);
+              },
+            ),
+            const SizedBox(height: 18),
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(
+                context,
+                _InventoryFilters(
+                  status: _status == _all ? null : _status,
+                  department: _department == _all ? null : _department,
+                ),
+              ),
+              icon: const Icon(Icons.check),
+              label: const Text('Apply filters'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _InventoryData {

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/reservation_service.dart';
+import '../../features/reservations/domain/reservation_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/borrow_log_app_bar.dart';
 import '../auth/login_screen.dart';
@@ -19,7 +20,7 @@ class StudentDashboard extends StatefulWidget {
 
 class _StudentDashboardState extends State<StudentDashboard> {
   final _notificationService = NotificationService();
-  final _reservationService = ReservationService();
+  final ReservationRepository _reservationService = ReservationService();
   int _unread = 0;
   late Future<_StudentSummary> _summary;
   String _firstName = 'there';

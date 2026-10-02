@@ -5,7 +5,9 @@ import '../../models/reservation.dart';
 import '../../models/reservation_asset.dart';
 import '../../services/inventory_service.dart';
 import '../../services/reservation_service.dart';
+import '../../features/reservations/domain/reservation_repository.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/borrow_log_app_bar.dart';
 import '../../widgets/borrow_log_states.dart';
 import '../shared/borrower_slip_screen.dart';
 
@@ -19,7 +21,7 @@ class StaffReservationsScreen extends StatefulWidget {
 
 class _StaffReservationsScreenState extends State<StaffReservationsScreen>
     with SingleTickerProviderStateMixin {
-  final _service = ReservationService();
+  final ReservationRepository _service = ReservationService();
   late TabController _tabController;
   late Future<List<Reservation>> _future;
 
@@ -45,8 +47,8 @@ class _StaffReservationsScreenState extends State<StaffReservationsScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Reservations'),
+      appBar: BorrowLogAppBar(
+        title: 'Reservations',
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),

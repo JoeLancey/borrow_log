@@ -102,10 +102,12 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                          const Center(child: UmBrandMark(size: 64)),
+                          const SizedBox(height: AppSpacing.xl),
                         Text('Create a new password', style: theme.textTheme.headlineSmall),
                         const SizedBox(height: AppSpacing.xs),
                         Text(
-                          'Choose a strong password to secure your BorrowLog account.',
+                            'Choose a strong password to secure your Borrow Log account.',
                           style: theme.textTheme.bodyMedium,
                         ),
                         const SizedBox(height: AppSpacing.xl),

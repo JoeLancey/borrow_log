@@ -9,8 +9,10 @@ import '../../models/reservation_asset.dart';
 import '../../services/csv_export_service.dart';
 import '../../services/inventory_service.dart';
 import '../../services/reservation_service.dart';
+import '../../features/reservations/domain/reservation_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/csv_download.dart';
+import '../../widgets/borrow_log_app_bar.dart';
 import '../../widgets/borrow_log_states.dart';
 
 class ReportsScreen extends StatefulWidget {
@@ -21,7 +23,7 @@ class ReportsScreen extends StatefulWidget {
 }
 
 class _ReportsScreenState extends State<ReportsScreen> {
-  final _reservationService = ReservationService();
+  final ReservationRepository _reservationService = ReservationService();
   final _inventoryService = InventoryService();
 
   late Future<_ReportData> _future;
@@ -154,8 +156,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Reports'),
+      appBar: BorrowLogAppBar(
+        title: 'Reports',
         actions: [
           FutureBuilder<_ReportData>(
             future: _future,

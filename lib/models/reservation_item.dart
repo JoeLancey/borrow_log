@@ -15,15 +15,43 @@ class ReservationItem {
     this.equipmentTypeName,
   });
 
-  factory ReservationItem.fromMap(Map<String, dynamic> map) {
-    final type = map['equipment_types'];
+  factory ReservationItem.fromJson(Map<String, dynamic> json) {
+    final type = json['equipment_types'];
     return ReservationItem(
-      id: map['id'] as String,
-      reservationId: map['reservation_id'] as String,
-      equipmentTypeId: map['equipment_type_id'] as String,
-      quantityRequested: map['quantity_requested'] as int,
+      id: json['id'] as String,
+      reservationId: json['reservation_id'] as String,
+      equipmentTypeId: json['equipment_type_id'] as String,
+      quantityRequested: json['quantity_requested'] as int,
       equipmentTypeName:
           type is Map ? type['name'] as String? : null,
+    );
+  }
+
+  factory ReservationItem.fromMap(Map<String, dynamic> map) =>
+      ReservationItem.fromJson(map);
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'reservation_id': reservationId,
+      'equipment_type_id': equipmentTypeId,
+      'quantity_requested': quantityRequested,
+    };
+  }
+
+  ReservationItem copyWith({
+    String? id,
+    String? reservationId,
+    String? equipmentTypeId,
+    int? quantityRequested,
+    String? equipmentTypeName,
+  }) {
+    return ReservationItem(
+      id: id ?? this.id,
+      reservationId: reservationId ?? this.reservationId,
+      equipmentTypeId: equipmentTypeId ?? this.equipmentTypeId,
+      quantityRequested: quantityRequested ?? this.quantityRequested,
+      equipmentTypeName: equipmentTypeName ?? this.equipmentTypeName,
     );
   }
 }

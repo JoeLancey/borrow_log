@@ -2,6 +2,57 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 
+class UmBrandMark extends StatelessWidget {
+  final double size;
+  final bool showLabel;
+
+  const UmBrandMark({
+    super.key,
+    this.size = 72,
+    this.showLabel = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final labelStyle = Theme.of(context).textTheme.labelMedium?.copyWith(
+          color: Colors.white,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 1.1,
+        );
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: size + 12,
+          height: size + 12,
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.14),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Image.asset(
+            'assets/images/um-logo.png',
+            semanticLabel: 'University of Mindanao logo',
+            fit: BoxFit.contain,
+          ),
+        ),
+        if (showLabel) ...[
+          const SizedBox(height: AppSpacing.md),
+          Text('UNIVERSITY OF MINDANAO', style: labelStyle),
+        ],
+      ],
+    );
+  }
+}
+
 class AppButton extends StatelessWidget {
   final String label;
   final VoidCallback? onPressed;
@@ -67,6 +118,7 @@ class AppTextField extends StatelessWidget {
   final bool obscureText;
   final bool enabled;
   final TextInputType? keyboardType;
+  final TextCapitalization textCapitalization;
   final TextInputAction? textInputAction;
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
@@ -83,6 +135,7 @@ class AppTextField extends StatelessWidget {
     this.obscureText = false,
     this.enabled = true,
     this.keyboardType,
+    this.textCapitalization = TextCapitalization.sentences,
     this.textInputAction,
     this.onChanged,
     this.onSubmitted,
@@ -97,6 +150,7 @@ class AppTextField extends StatelessWidget {
       enabled: enabled,
       obscureText: obscureText,
       keyboardType: keyboardType,
+      textCapitalization: textCapitalization,
       textInputAction: textInputAction,
       onChanged: onChanged,
       onFieldSubmitted: onSubmitted,

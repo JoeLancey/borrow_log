@@ -51,42 +51,114 @@ class Reservation {
     this.equipmentTypeName,
   });
 
-  factory Reservation.fromMap(Map<String, dynamic> map) {
-    final profile = map['profiles'];
-    final equipmentType = map['equipment_types'];
+  factory Reservation.fromJson(Map<String, dynamic> json) {
+    final profile = json['profiles'];
+    final equipmentType = json['equipment_types'];
 
     return Reservation(
-      id: map['id'] as String,
-      studentId: map['student_id'] as String,
-      equipmentTypeId: map['equipment_type_id'] as String,
-      quantityRequested: map['quantity_requested'] as int,
-      subject: map['subject'] as String,
-      subjectCode: map['subject_code'] as String?,
-      instructor: map['instructor'] as String,
-      useDate: DateTime.parse(map['use_date'] as String),
-      useTime: map['use_time'] as String?,
-      notes: map['notes'] as String?,
-      status: map['status'] as String,
-      rejectionReason: map['rejection_reason'] as String?,
-      reviewedBy: map['reviewed_by'] as String?,
-      reviewedAt: map['reviewed_at'] != null
-          ? DateTime.tryParse(map['reviewed_at'].toString())
+      id: json['id'] as String,
+      studentId: json['student_id'] as String,
+      equipmentTypeId: json['equipment_type_id'] as String,
+      quantityRequested: json['quantity_requested'] as int,
+      subject: json['subject'] as String,
+      subjectCode: json['subject_code'] as String?,
+      instructor: json['instructor'] as String,
+      useDate: DateTime.parse(json['use_date'] as String),
+      useTime: json['use_time'] as String?,
+      notes: json['notes'] as String?,
+      status: json['status'] as String,
+      rejectionReason: json['rejection_reason'] as String?,
+      reviewedBy: json['reviewed_by'] as String?,
+      reviewedAt: json['reviewed_at'] != null
+          ? DateTime.tryParse(json['reviewed_at'].toString())
           : null,
-      releasedAt: map['released_at'] != null
-          ? DateTime.tryParse(map['released_at'].toString())
+      releasedAt: json['released_at'] != null
+          ? DateTime.tryParse(json['released_at'].toString())
           : null,
-      dueDate: map['due_date'] != null
-          ? DateTime.tryParse(map['due_date'].toString())
+      dueDate: json['due_date'] != null
+          ? DateTime.tryParse(json['due_date'].toString())
           : null,
-      returnedAt: map['returned_at'] != null
-          ? DateTime.tryParse(map['returned_at'].toString())
+      returnedAt: json['returned_at'] != null
+          ? DateTime.tryParse(json['returned_at'].toString())
           : null,
-      createdAt: map['created_at'] != null
-          ? DateTime.tryParse(map['created_at'].toString())
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString())
           : null,
       studentName: profile is Map ? profile['full_name'] as String? : null,
       equipmentTypeName:
           equipmentType is Map ? equipmentType['name'] as String? : null,
+    );
+  }
+
+  factory Reservation.fromMap(Map<String, dynamic> map) =>
+      Reservation.fromJson(map);
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'student_id': studentId,
+      'equipment_type_id': equipmentTypeId,
+      'quantity_requested': quantityRequested,
+      'subject': subject,
+      'subject_code': subjectCode,
+      'instructor': instructor,
+      'use_date': useDate.toIso8601String().split('T').first,
+      'use_time': useTime,
+      'notes': notes,
+      'status': status,
+      'rejection_reason': rejectionReason,
+      'reviewed_by': reviewedBy,
+      'reviewed_at': reviewedAt?.toIso8601String(),
+      'released_at': releasedAt?.toIso8601String(),
+      'due_date': dueDate?.toIso8601String().split('T').first,
+      'returned_at': returnedAt?.toIso8601String(),
+      'created_at': createdAt?.toIso8601String(),
+    };
+  }
+
+  Reservation copyWith({
+    String? id,
+    String? studentId,
+    String? equipmentTypeId,
+    int? quantityRequested,
+    String? subject,
+    String? subjectCode,
+    String? instructor,
+    DateTime? useDate,
+    String? useTime,
+    String? notes,
+    String? status,
+    String? rejectionReason,
+    String? reviewedBy,
+    DateTime? reviewedAt,
+    DateTime? releasedAt,
+    DateTime? dueDate,
+    DateTime? returnedAt,
+    DateTime? createdAt,
+    String? studentName,
+    String? equipmentTypeName,
+  }) {
+    return Reservation(
+      id: id ?? this.id,
+      studentId: studentId ?? this.studentId,
+      equipmentTypeId: equipmentTypeId ?? this.equipmentTypeId,
+      quantityRequested: quantityRequested ?? this.quantityRequested,
+      subject: subject ?? this.subject,
+      subjectCode: subjectCode ?? this.subjectCode,
+      instructor: instructor ?? this.instructor,
+      useDate: useDate ?? this.useDate,
+      useTime: useTime ?? this.useTime,
+      notes: notes ?? this.notes,
+      status: status ?? this.status,
+      rejectionReason: rejectionReason ?? this.rejectionReason,
+      reviewedBy: reviewedBy ?? this.reviewedBy,
+      reviewedAt: reviewedAt ?? this.reviewedAt,
+      releasedAt: releasedAt ?? this.releasedAt,
+      dueDate: dueDate ?? this.dueDate,
+      returnedAt: returnedAt ?? this.returnedAt,
+      createdAt: createdAt ?? this.createdAt,
+      studentName: studentName ?? this.studentName,
+      equipmentTypeName: equipmentTypeName ?? this.equipmentTypeName,
     );
   }
 

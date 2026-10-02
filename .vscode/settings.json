@@ -20,5 +20,11 @@
   ],
   "[typescript]": {
     "editor.defaultFormatter": "denoland.vscode-deno"
+  },
+  "chat.tools.terminal.autoApprove": {
+    "/^flutter analyze$/": {
+      "approve": true,
+      "matchCommandLine": true
+    }
   }
 }

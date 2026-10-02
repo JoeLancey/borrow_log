@@ -1,5 +1,4 @@
-import 'dart:typed_data';
-
+import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
@@ -23,13 +22,25 @@ class SlipPdfService {
 
     const maroon = PdfColor.fromInt(0xFF800000);
     const grey = PdfColor.fromInt(0xFF666666);
+    final logo = pw.MemoryImage(
+      (await rootBundle.load('assets/images/um-logo.png'))
+          .buffer
+          .asUint8List(),
+    );
 
     doc.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(40),
+        footer: (context) => pw.Align(
+          alignment: pw.Alignment.centerRight,
+          child: pw.Text(
+            'Page ${context.pageNumber} of ${context.pagesCount}',
+            style: pw.TextStyle(fontSize: 9, color: grey),
+          ),
+        ),
         build: (context) => [
-          _header(reservation, maroon),
+          _header(reservation, maroon, logo),
           pw.SizedBox(height: 12),
           _infoBlock(reservation, maroon, grey),
           pw.SizedBox(height: 16),
@@ -54,10 +65,12 @@ class SlipPdfService {
   // SECTIONS
   // ---------------------------------------------------------
 
-  pw.Widget _header(Reservation r, PdfColor maroon) {
+  pw.Widget _header(Reservation r, PdfColor maroon, pw.ImageProvider logo) {
     return pw.Row(
       crossAxisAlignment: pw.CrossAxisAlignment.center,
       children: [
+        pw.Image(logo, width: 42, height: 42),
+        pw.SizedBox(width: 12),
         pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [

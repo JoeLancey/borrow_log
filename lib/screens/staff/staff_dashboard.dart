@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../services/inventory_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/reservation_service.dart';
+import '../../features/reservations/domain/reservation_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_components.dart';
 import '../../widgets/borrow_log_app_bar.dart';
@@ -21,7 +22,7 @@ class StaffDashboard extends StatefulWidget {
 }
 
 class _StaffDashboardState extends State<StaffDashboard> {
-  final _reservationService = ReservationService();
+  final ReservationRepository _reservationService = ReservationService();
   final _inventoryService = InventoryService();
   late Future<_StaffSummary> _summary;
   String _firstName = 'there';

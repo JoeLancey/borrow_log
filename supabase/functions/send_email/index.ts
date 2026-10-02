@@ -17,48 +17,56 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const SUPABASE_URL = Deno.env.get('761ccd514df341c8a244006a0c9a53cc0a2afe1b0dcb5e4801eef52a011a2a4f')!;
-    const SERVICE_ROLE = Deno.env.get('6d7238f45220b136b5d990a62c313b2f734e16295ddffc7d9891e6c6b1d56488')!;
-    const ANON_KEY = Deno.env.get('8aba34ddc1e2317411f16fcb94c12d758281a063bd069b0ed76aa1f2c7f1fc81')!;
-    const BREVO_API_KEY = Deno.env.get(' 754c27b8aef5873beeee0f6ec67742022d7299077729ad5d553bb71dce859449');
-    const BREVO_SENDER_EMAIL = Deno.env.get(' 080b87a72e4365ec7070cd333194048a4f56a451ebdc1723dea589f76a6a520a');
-    const BREVO_SENDER_NAME = Deno.env.get('B0345f98693d39ace2f571eeed27fb6f98c6ea08cb42aa63e38043b3c5fcbe757') ?? 'BORROW LOG';
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+    const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY');
+    const BREVO_API_KEY = Deno.env.get('BREVO_API_KEY');
+    const BREVO_SENDER_EMAIL = Deno.env.get('BREVO_SENDER_EMAIL');
+    const BREVO_SENDER_NAME =
+      Deno.env.get('BREVO_SENDER_NAME') ?? 'BORROW LOG';
 
+    if (!SUPABASE_URL || !SERVICE_ROLE || !ANON_KEY) {
+      return json({ error: 'Missing Supabase configuration' }, 500);
+    }
     if (!BREVO_API_KEY || !BREVO_SENDER_EMAIL) {
       return json({ error: 'Missing Brevo configuration' }, 500);
     }
 
     // -----------------------------------------------------------------
-    // 1. Verify caller is staff (skipped if no Authorization header — for
-    //    manual testing only; the Flutter client always sends the JWT)
+    // 1. Verify caller is staff.
     // -----------------------------------------------------------------
     const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return json({ error: 'Authorization required' }, 401);
+    }
 
-    if (authHeader) {
-      const jwt = authHeader.replace('Bearer ', '');
-      const callerClient = createClient(SUPABASE_URL, ANON_KEY, {
-        global: { headers: { Authorization: `Bearer ${jwt}` } },
-      });
+    const jwt = authHeader.substring('Bearer '.length).trim();
+    if (!jwt) {
+      return json({ error: 'Authorization required' }, 401);
+    }
 
-      const {
-        data: { user: caller },
-        error: callerErr,
-      } = await callerClient.auth.getUser();
+    const callerClient = createClient(SUPABASE_URL, ANON_KEY, {
+      global: { headers: { Authorization: `Bearer ${jwt}` } },
+    });
 
-      if (callerErr || !caller) {
-        return json({ error: 'Invalid token' }, 401);
-      }
+    const {
+      data: { user: caller },
+      error: callerErr,
+    } = await callerClient.auth.getUser();
 
-      const adminClient = createClient(SUPABASE_URL, SERVICE_ROLE);
-      const { data: callerProfile } = await adminClient
-        .from('profiles')
-        .select('role')
-        .eq('id', caller.id)
-        .maybeSingle();
+    if (callerErr || !caller) {
+      return json({ error: 'Invalid token' }, 401);
+    }
 
-      if (callerProfile?.role !== 'staff') {
-        return json({ error: 'Staff access required' }, 403);
-      }
+    const adminClient = createClient(SUPABASE_URL, SERVICE_ROLE);
+    const { data: callerProfile } = await adminClient
+      .from('profiles')
+      .select('role')
+      .eq('id', caller.id)
+      .maybeSingle();
+
+    if (callerProfile?.role !== 'staff') {
+      return json({ error: 'Staff access required' }, 403);
     }
 
     // -----------------------------------------------------------------

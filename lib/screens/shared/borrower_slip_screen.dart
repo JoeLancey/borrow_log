@@ -5,6 +5,7 @@ import 'package:printing/printing.dart';
 import '../../models/reservation.dart';
 import '../../models/reservation_asset.dart';
 import '../../services/reservation_service.dart';
+import '../../features/reservations/domain/reservation_repository.dart';
 import '../../services/slip_pdf_service.dart';
 import '../../theme/app_theme.dart';
 
@@ -18,7 +19,7 @@ class BorrowerSlipScreen extends StatefulWidget {
 }
 
 class _BorrowerSlipScreenState extends State<BorrowerSlipScreen> {
-  final _service = ReservationService();
+  final ReservationRepository _service = ReservationService();
   final _pdfService = SlipPdfService();
   late Future<_SlipData?> _future;
   bool _generatingPdf = false;

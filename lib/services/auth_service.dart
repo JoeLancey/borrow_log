@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Result of an authentication attempt.
@@ -24,6 +25,9 @@ class AuthResult {
 
 /// Handles all Supabase authentication and profile retrieval.
 class AuthService {
+  static const _mobilePasswordResetRedirect =
+      'io.supabase.flutter://login-callback/';
+
   SupabaseClient get _client {
     if (!Supabase.instance.isInitialized) {
       throw StateError(
@@ -95,10 +99,9 @@ class AuthService {
   /// Send a secure Supabase password-recovery email.
   Future<AuthResult> requestPasswordReset({required String email}) async {
     try {
-      final redirectTo = Uri.base.origin;
       await _client.auth.resetPasswordForEmail(
         email.trim(),
-        redirectTo: redirectTo.isEmpty ? null : redirectTo,
+        redirectTo: kIsWeb ? Uri.base.origin : _mobilePasswordResetRedirect,
       );
       return AuthResult(success: true);
     } on AuthException catch (e) {

@@ -160,8 +160,8 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget _brandMark(ThemeData theme) {
     return Column(
       children: [
-        Image.asset('assets/images/um-logo.png', height: 82),
-        const SizedBox(height: AppSpacing.md),
+        const UmBrandMark(size: 76),
+        const SizedBox(height: AppSpacing.lg),
         Text('BORROW LOG',
             style: theme.textTheme.headlineMedium?.copyWith(
               color: Colors.white,
@@ -177,7 +177,7 @@ class _LoginScreenState extends State<LoginScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Image.asset('assets/images/um-logo.png', height: 92),
+          const UmBrandMark(size: 82),
           const SizedBox(height: AppSpacing.xl),
           Text('Borrow with clarity.',
               style: theme.textTheme.displaySmall?.copyWith(
@@ -222,6 +222,7 @@ class _LoginScreenState extends State<LoginScreen> {
               prefixIcon: Icons.email_outlined,
               enabled: !_isLoading,
               keyboardType: TextInputType.emailAddress,
+              textCapitalization: TextCapitalization.none,
               textInputAction: TextInputAction.next,
             ),
             const SizedBox(height: AppSpacing.lg),

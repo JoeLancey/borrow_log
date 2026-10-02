@@ -1,5 +1,5 @@
 name: borrow_log
-description: "A new Flutter project."
+description: "University laboratory equipment borrowing and return management."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -41,6 +41,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   supabase_flutter: ^2.17.2
   google_fonts: ^6.2.1
+  connectivity_plus: ^7.3.2
 
 dev_dependencies:
   flutter_test:
@@ -52,6 +53,8 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+  flutter_native_splash: ^2.4.8
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -62,3 +65,23 @@ flutter:
 
   assets:
     - assets/images/um-logo.png
+    - assets/images/um-logo-padded.png
+    - assets/images/um-splash-logo.png
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/images/um-logo-padded.png
+  adaptive_icon_background: '#800000'
+  adaptive_icon_foreground: assets/images/um-logo-padded.png
+  remove_alpha_ios: true
+
+flutter_native_splash:
+  color: '#800000'
+  image: assets/images/um-splash-logo.png
+  android_12:
+    color: '#800000'
+    image: assets/images/um-splash-logo.png
+  android: true
+  ios: true
+  web: false

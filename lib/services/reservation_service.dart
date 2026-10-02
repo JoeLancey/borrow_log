@@ -4,10 +4,11 @@ import '../models/reservation.dart';
 import '../models/reservation_asset.dart';
 import '../models/reservation_item.dart';
 import '../models/equipment_asset.dart';
+import '../features/reservations/domain/reservation_repository.dart';
 import 'email_service.dart';
 import 'notification_service.dart';
 
-class ReservationService {
+class ReservationService implements ReservationRepository {
   final SupabaseClient _client = Supabase.instance.client;
 
   static const _joinedSelect =
@@ -17,6 +18,7 @@ class ReservationService {
   // READS
   // ---------------------------------------------------------
 
+  @override
   Future<List<Reservation>> fetchMyReservations() async {
     final uid = _client.auth.currentUser!.id;
     final data = await _client
@@ -30,6 +32,7 @@ class ReservationService {
         .toList();
   }
 
+  @override
   Future<List<Reservation>> fetchAllReservations() async {
     final data = await _client
         .from('reservations')
@@ -41,6 +44,7 @@ class ReservationService {
         .toList();
   }
 
+  @override
   Future<Reservation?> fetchReservationById(String id) async {
     final data = await _client
         .from('reservations')
@@ -53,6 +57,7 @@ class ReservationService {
   }
 
   /// Items (equipment types + quantities) for a reservation.
+  @override
   Future<List<ReservationItem>> fetchReservationItems(
       String reservationId) async {
     final data = await _client
@@ -65,6 +70,7 @@ class ReservationService {
         .toList();
   }
 
+  @override
   Future<List<ReservationAsset>> fetchReservationAssets(
       String reservationId) async {
     final data = await _client
@@ -77,12 +83,14 @@ class ReservationService {
         .toList();
   }
 
+  @override
   Future<List<EquipmentAsset>> fetchAssignedAssets(
       String reservationId) async {
     final links = await fetchReservationAssets(reservationId);
     return links.map((l) => l.asset).whereType<EquipmentAsset>().toList();
   }
 
+  @override
   Future<Map<String, String>> fetchReturnConditions(
       String reservationId) async {
     final links = await fetchReservationAssets(reservationId);
@@ -106,6 +114,7 @@ class ReservationService {
   // SEARCH
   // ---------------------------------------------------------
 
+  @override
   Future<List<Reservation>> searchReservations({
     String? text,
     String? status,
@@ -145,6 +154,7 @@ class ReservationService {
     return results;
   }
 
+  @override
   Future<List<Reservation>> searchByPropertyNumber(
       String propertyNumber) async {
     final pn = propertyNumber.trim().toUpperCase();
@@ -191,6 +201,7 @@ class ReservationService {
   /// The first item is also written to the legacy
   /// `reservations.equipment_type_id` and `reservations.quantity_requested`
   /// columns (both NOT NULL) so existing screens keep working.
+  @override
   Future<void> createReservation({
     required List<ReservationItem> items,
     required String subject,
@@ -241,17 +252,27 @@ class ReservationService {
         );
   }
 
+  @override
   Future<void> cancelReservation(String id) async {
-    await _client.from('reservations').update({
-      'status': 'cancelled',
-      'updated_at': DateTime.now().toIso8601String(),
-    }).eq('id', id);
+    final updated = await _client
+        .from('reservations')
+        .update({
+          'status': 'cancelled',
+          'updated_at': DateTime.now().toIso8601String(),
+        })
+        .eq('id', id)
+        .eq('status', 'pending')
+        .select('id');
+    if ((updated as List).isEmpty) {
+      throw StateError('Only pending reservations can be cancelled.');
+    }
   }
 
   // ---------------------------------------------------------
   // STAFF WRITES
   // ---------------------------------------------------------
 
+  @override
   Future<void> approveReservation({
     required String reservationId,
     required List<String> assetIds,
@@ -270,18 +291,34 @@ class ReservationService {
     }
 
     for (final id in assetIds) {
-      await _client.from('equipment_assets').update({
-        'status': 'reserved',
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', id);
+      final updated = await _client
+          .from('equipment_assets')
+          .update({
+            'status': 'reserved',
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', id)
+          .eq('status', 'available')
+          .select('id');
+      if ((updated as List).isEmpty) {
+        throw StateError('One or more selected assets are no longer available.');
+      }
     }
 
-    await _client.from('reservations').update({
-      'status': 'approved',
-      'reviewed_by': uid,
-      'reviewed_at': DateTime.now().toIso8601String(),
-      'updated_at': DateTime.now().toIso8601String(),
-    }).eq('id', reservationId);
+    final updated = await _client
+        .from('reservations')
+        .update({
+          'status': 'approved',
+          'reviewed_by': uid,
+          'reviewed_at': DateTime.now().toIso8601String(),
+          'updated_at': DateTime.now().toIso8601String(),
+        })
+        .eq('id', reservationId)
+        .eq('status', 'pending')
+        .select('id');
+    if ((updated as List).isEmpty) {
+      throw StateError('Only pending reservations can be approved.');
+    }
 
     // Notify + email (best-effort)
     try {
@@ -329,19 +366,28 @@ class ReservationService {
     } catch (_) {}
   }
 
+  @override
   Future<void> rejectReservation({
     required String reservationId,
     required String reason,
   }) async {
     final uid = _client.auth.currentUser!.id;
 
-    await _client.from('reservations').update({
-      'status': 'rejected',
-      'rejection_reason': reason,
-      'reviewed_by': uid,
-      'reviewed_at': DateTime.now().toIso8601String(),
-      'updated_at': DateTime.now().toIso8601String(),
-    }).eq('id', reservationId);
+    final updated = await _client
+        .from('reservations')
+        .update({
+          'status': 'rejected',
+          'rejection_reason': reason,
+          'reviewed_by': uid,
+          'reviewed_at': DateTime.now().toIso8601String(),
+          'updated_at': DateTime.now().toIso8601String(),
+        })
+        .eq('id', reservationId)
+        .eq('status', 'pending')
+        .select('id');
+    if ((updated as List).isEmpty) {
+      throw StateError('Only pending reservations can be rejected.');
+    }
 
     try {
       final row = await _client
@@ -387,6 +433,7 @@ class ReservationService {
     } catch (_) {}
   }
 
+  @override
   Future<void> releaseReservation({
     required String reservationId,
     required DateTime dueDate,
@@ -401,12 +448,20 @@ class ReservationService {
       }).eq('id', link.equipmentAssetId);
     }
 
-    await _client.from('reservations').update({
-      'status': 'borrowed',
-      'released_at': now,
-      'due_date': dueDate.toIso8601String().split('T').first,
-      'updated_at': now,
-    }).eq('id', reservationId);
+    final updated = await _client
+        .from('reservations')
+        .update({
+          'status': 'borrowed',
+          'released_at': now,
+          'due_date': dueDate.toIso8601String().split('T').first,
+          'updated_at': now,
+        })
+        .eq('id', reservationId)
+        .eq('status', 'approved')
+        .select('id');
+    if ((updated as List).isEmpty) {
+      throw StateError('Only approved reservations can be released.');
+    }
 
     try {
       final row = await _client
@@ -456,6 +511,7 @@ class ReservationService {
     } catch (_) {}
   }
 
+  @override
   Future<void> recordAssetReturn({
     required String reservationAssetId,
     required String equipmentAssetId,
@@ -480,13 +536,22 @@ class ReservationService {
     }).eq('id', equipmentAssetId);
   }
 
+  @override
   Future<void> completeReservation(String reservationId) async {
     final now = DateTime.now().toIso8601String();
-    await _client.from('reservations').update({
-      'status': 'completed',
-      'returned_at': now,
-      'updated_at': now,
-    }).eq('id', reservationId);
+    final updated = await _client
+        .from('reservations')
+        .update({
+          'status': 'completed',
+          'returned_at': now,
+          'updated_at': now,
+        })
+        .eq('id', reservationId)
+        .eq('status', 'borrowed')
+        .select('id');
+    if ((updated as List).isEmpty) {
+      throw StateError('Only borrowed reservations can be completed.');
+    }
 
     try {
       final row = await _client

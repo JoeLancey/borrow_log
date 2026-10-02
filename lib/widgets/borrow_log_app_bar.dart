@@ -15,6 +15,7 @@ class BorrowLogAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
   final List<Widget>? actions;
   final Widget? leading;
+  final PreferredSizeWidget? bottom;
   final bool showLogo;
 
   const BorrowLogAppBar({
@@ -22,11 +23,14 @@ class BorrowLogAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.title,
     this.actions,
     this.leading,
+    this.bottom,
     this.showLogo = true,
   });
 
   @override
-  Size get preferredSize => const Size.fromHeight(84);
+  Size get preferredSize => Size.fromHeight(
+        84 + (bottom?.preferredSize.height ?? 0),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -37,6 +41,7 @@ class BorrowLogAppBar extends StatelessWidget implements PreferredSizeWidget {
       toolbarHeight: 84,
       titleSpacing: leading == null ? 12 : null,
       leading: leading,
+      bottom: bottom,
       backgroundColor: theme.colorScheme.primary,
       elevation: 0,
       flexibleSpace: Container(

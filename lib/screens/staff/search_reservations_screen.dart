@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../models/reservation.dart';
 import '../../services/reservation_service.dart';
+import '../../features/reservations/domain/reservation_repository.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/borrow_log_app_bar.dart';
 import '../shared/borrower_slip_screen.dart';
 
 class SearchReservationsScreen extends StatefulWidget {
@@ -14,7 +16,7 @@ class SearchReservationsScreen extends StatefulWidget {
 }
 
 class _SearchReservationsScreenState extends State<SearchReservationsScreen> {
-  final _service = ReservationService();
+  final ReservationRepository _service = ReservationService();
   final _textController = TextEditingController();
 
   String? _statusFilter;
@@ -119,8 +121,8 @@ class _SearchReservationsScreenState extends State<SearchReservationsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Search Reservations'),
+      appBar: BorrowLogAppBar(
+        title: 'Search Reservations',
         actions: [
           IconButton(
             tooltip: 'Clear',

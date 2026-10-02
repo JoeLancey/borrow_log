@@ -1,17 +1,60 @@
-# borrow_log
+# BorrowLog
 
-A new Flutter project.
+BorrowLog manages university laboratory equipment reservations, physical asset
+release and return tracking, notifications, reports, and staff inventory.
 
-## Getting Started
+## Stack
 
-This project is a starting point for a Flutter application.
+- Flutter and Dart
+- Supabase Auth and Postgres
+- Material 3 with Google Fonts
+- `fl_chart` for reporting
+- `pdf`, `printing`, and `csv` for exports
 
-A few resources to get you started if this is your first Flutter project:
+## Configuration
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+Supabase configuration is supplied at runtime and is not stored in Dart source.
+Use the publishable client key only; never pass a service-role key to Flutter.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```powershell
+flutter run `
+  --dart-define=SUPABASE_URL=https://your-project.supabase.co `
+  --dart-define=SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+```
+
+The same values are required for `flutter build` commands. Store local values
+in a private script or IDE launch configuration rather than committing them.
+
+## Supabase setup
+
+The repository currently contains Edge Functions and Supabase configuration,
+but does not yet contain the database schema migrations or RLS policy SQL.
+Before connecting a new project, create the required tables and policies for
+profiles, laboratories, equipment, reservations, returns, and notifications.
+Deploy Edge Functions with these server-side secrets:
+
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `BREVO_API_KEY`
+- `BREVO_SENDER_EMAIL`
+- `BREVO_SENDER_NAME`
+
+## Development
+
+```powershell
+flutter pub get
+flutter analyze
+flutter test
+```
+
+## Platforms
+
+The Flutter project includes Android, iOS, web, Windows, macOS, and Linux
+targets. Validate printing, CSV delivery, deep links, and password recovery on
+each platform before release.
+
+## Asset
+
+The University of Mindanao logo is loaded from
+`assets/images/um-logo.png` and declared in `pubspec.yaml`.
