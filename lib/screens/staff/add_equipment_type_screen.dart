@@ -4,6 +4,7 @@ import '../../models/laboratory.dart';
 import '../../services/inventory_service.dart';
 import '../../services/laboratory_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/borrow_log_app_bar.dart';
 
 class AddEquipmentTypeScreen extends StatefulWidget {
   const AddEquipmentTypeScreen({super.key});
@@ -93,7 +94,13 @@ class _AddEquipmentTypeScreenState extends State<AddEquipmentTypeScreen> {
     );
   }
 
+  void _stepCount(int delta) {
+    final next = (_count + delta).clamp(0, 500);
+    setState(() => _countController.text = '$next');
+  }
+
   Future<void> _save() async {
+    FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) return;
     if (_selectedLab == null) {
       setState(() => _error = 'Please select a laboratory.');
@@ -176,313 +183,517 @@ class _AddEquipmentTypeScreenState extends State<AddEquipmentTypeScreen> {
     return 'Failed to save: $s';
   }
 
+  // ---------------------------------------------------------
+  // UI helpers
+  // ---------------------------------------------------------
+
+  Color _statusColor(String s) {
+    switch (s) {
+      case 'available':
+        return const Color(0xFF2E7D32);
+      case 'reserved':
+        return const Color(0xFFB26A00);
+      case 'borrowed':
+        return const Color(0xFF1565C0);
+      case 'maintenance':
+        return const Color(0xFFEF6C00);
+      case 'damaged':
+        return const Color(0xFFC62828);
+      default:
+        return const Color(0xFF616161);
+    }
+  }
+
+  InputDecoration _decoration(
+    String label, {
+    String? hint,
+    String? helper,
+    IconData? icon,
+  }) {
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      helperText: helper,
+      helperMaxLines: 3,
+      prefixIcon: icon == null ? null : Icon(icon, size: 20),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+    );
+  }
+
+  Widget _section({
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    required List<Widget> children,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: AppTheme.maroon.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, size: 18, color: AppTheme.maroon),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleSmall
+                          ?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    if (subtitle != null)
+                      Text(
+                        subtitle,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ...children,
+        ],
+      ),
+    );
+  }
+
+  Widget _gap() => const SizedBox(height: 14);
+
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
     if (_loadingLabs) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Add Equipment Type')),
-        body: const Center(child: CircularProgressIndicator()),
+      return const Scaffold(
+        appBar: BorrowLogAppBar(title: 'Add equipment type'),
+        body: Center(child: CircularProgressIndicator()),
       );
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Add Equipment Type')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Laboratory
-              DropdownButtonFormField<Laboratory>(
-                initialValue: _selectedLab,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Laboratory *',
-                  border: OutlineInputBorder(),
-                ),
-                items: _labs
-                    .map((lab) => DropdownMenuItem(
-                          value: lab,
-                          child: Text(
-                            lab.displayLabel,
-                            overflow: TextOverflow.ellipsis,
+      appBar: const BorrowLogAppBar(title: 'Add equipment type'),
+      body: SafeArea(
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 640),
+            child: SingleChildScrollView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+              child: Form(
+                key: _formKey,
+                autovalidateMode: AutovalidateMode.onUserInteraction,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // ---- Details ----
+                    _section(
+                      icon: Icons.memory,
+                      title: 'Type details',
+                      subtitle: 'What kind of equipment is this?',
+                      children: [
+                        DropdownButtonFormField<Laboratory>(
+                          initialValue: _selectedLab,
+                          isExpanded: true,
+                          decoration: _decoration(
+                            'Laboratory *',
+                            icon: Icons.meeting_room_outlined,
                           ),
-                        ))
-                    .toList(),
-                onChanged: _saving
-                    ? null
-                    : (v) => setState(() => _selectedLab = v),
-                validator: (v) => v == null ? 'Required' : null,
-              ),
-              const SizedBox(height: 16),
-
-              // Name
-              TextFormField(
-                controller: _nameController,
-                enabled: !_saving,
-                onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
-                  labelText: 'Name *',
-                  hintText: 'e.g. Keyboard',
-                  border: OutlineInputBorder(),
-                  helperText:
-                      'Property numbers will be generated as LabPrefix-Name-001, LabPrefix-Name-002, ...',
-                ),
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Name is required' : null,
-              ),
-              const SizedBox(height: 16),
-
-              // Category
-              TextFormField(
-                controller: _categoryController,
-                enabled: !_saving,
-                decoration: const InputDecoration(
-                  labelText: 'Category',
-                  hintText: 'e.g. Input Device',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Description
-              TextFormField(
-                controller: _descriptionController,
-                enabled: !_saving,
-                maxLines: 2,
-                decoration: const InputDecoration(
-                  labelText: 'Description',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // Divider between metadata and units
-              const Divider(thickness: 1),
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8),
-                child: Text(
-                  'INITIAL UNITS',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.maroon,
-                    letterSpacing: 1,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 4),
-
-              // Quantity
-              TextFormField(
-                controller: _countController,
-                enabled: !_saving,
-                keyboardType: TextInputType.number,
-                onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
-                  labelText: 'How many units? *',
-                  hintText: 'e.g. 10',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) {
-                  final n = int.tryParse(v?.trim() ?? '');
-                  if (n == null || n < 0) return 'Enter 0 or more';
-                  if (n > 500) return 'Max 500';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Status
-              DropdownButtonFormField<String>(
-                initialValue: _status,
-                decoration: const InputDecoration(
-                  labelText: 'Initial status',
-                  border: OutlineInputBorder(),
-                ),
-                items: _statuses
-                    .map((s) => DropdownMenuItem(
-                          value: s,
-                          child: Text(
-                            s[0].toUpperCase() + s.substring(1),
+                          items: _labs
+                              .map(
+                                (lab) => DropdownMenuItem(
+                                  value: lab,
+                                  child: Text(
+                                    lab.displayLabel,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: _saving
+                              ? null
+                              : (v) => setState(() => _selectedLab = v),
+                          validator: (v) => v == null ? 'Required' : null,
+                        ),
+                        _gap(),
+                        TextFormField(
+                          controller: _nameController,
+                          enabled: !_saving,
+                          textCapitalization: TextCapitalization.words,
+                          textInputAction: TextInputAction.next,
+                          onChanged: (_) => setState(() {}),
+                          decoration: _decoration(
+                            'Name *',
+                            hint: 'e.g. Keyboard',
+                            icon: Icons.label_outline,
+                            helper:
+                                'Property numbers are generated as LabPrefix-Name-001, LabPrefix-Name-002, …',
                           ),
-                        ))
-                    .toList(),
-                onChanged: _saving
-                    ? null
-                    : (v) => setState(() => _status = v ?? 'available'),
-              ),
-              const SizedBox(height: 16),
+                          validator: (v) => (v == null || v.trim().isEmpty)
+                              ? 'Name is required'
+                              : null,
+                        ),
+                        _gap(),
+                        TextFormField(
+                          controller: _categoryController,
+                          enabled: !_saving,
+                          textCapitalization: TextCapitalization.words,
+                          textInputAction: TextInputAction.next,
+                          decoration: _decoration(
+                            'Category',
+                            hint: 'e.g. Input Device',
+                            icon: Icons.category_outlined,
+                          ),
+                        ),
+                        _gap(),
+                        TextFormField(
+                          controller: _descriptionController,
+                          enabled: !_saving,
+                          maxLines: 2,
+                          textCapitalization: TextCapitalization.sentences,
+                          decoration: _decoration(
+                            'Description',
+                            icon: Icons.notes_outlined,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
 
-              // Condition notes
-              TextFormField(
-                controller: _notesController,
-                enabled: !_saving,
-                maxLines: 2,
-                decoration: const InputDecoration(
-                  labelText: 'Condition notes (applies to all initial units)',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 20),
+                    // ---- Initial units ----
+                    _section(
+                      icon: Icons.inventory_2_outlined,
+                      title: 'Initial units',
+                      subtitle: 'Optional. Set to 0 to add units later.',
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                controller: _countController,
+                                enabled: !_saving,
+                                keyboardType: TextInputType.number,
+                                textAlign: TextAlign.center,
+                                onChanged: (_) => setState(() {}),
+                                decoration: _decoration(
+                                  'How many units? *',
+                                  hint: 'e.g. 10',
+                                ),
+                                validator: (v) {
+                                  final n = int.tryParse(v?.trim() ?? '');
+                                  if (n == null || n < 0) {
+                                    return 'Enter 0 or more';
+                                  }
+                                  if (n > 500) return 'Max 500';
+                                  return null;
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Row(
+                                children: [
+                                  IconButton.filledTonal(
+                                    tooltip: 'Decrease',
+                                    onPressed: _saving || _count <= 0
+                                        ? null
+                                        : () => _stepCount(-1),
+                                    icon: const Icon(Icons.remove),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  IconButton.filledTonal(
+                                    tooltip: 'Increase',
+                                    onPressed: _saving || _count >= 500
+                                        ? null
+                                        : () => _stepCount(1),
+                                    icon: const Icon(Icons.add),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        _gap(),
+                        Text(
+                          'Initial status',
+                          style: Theme.of(context).textTheme.labelLarge,
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: _statuses.map((s) {
+                            return ChoiceChip(
+                              avatar: Container(
+                                width: 10,
+                                height: 10,
+                                decoration: BoxDecoration(
+                                  color: _statusColor(s),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              label: Text(s[0].toUpperCase() + s.substring(1)),
+                              selected: _status == s,
+                              onSelected: _saving
+                                  ? null
+                                  : (_) => setState(() => _status = s),
+                            );
+                          }).toList(),
+                        ),
+                        _gap(),
+                        TextFormField(
+                          controller: _notesController,
+                          enabled: !_saving,
+                          maxLines: 2,
+                          textCapitalization: TextCapitalization.sentences,
+                          decoration: _decoration(
+                            'Condition notes',
+                            helper: 'Applies to all initial units.',
+                            icon: Icons.sticky_note_2_outlined,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
 
-              // Live preview
-              _previewCard(),
+                    // ---- Live preview ----
+                    _previewCard(scheme),
 
-              if (_error != null) ...[
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.red.shade200),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.error_outline,
-                          color: Colors.red.shade700, size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _error!,
-                          style: TextStyle(color: Colors.red.shade700),
+                    // ---- Error ----
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 200),
+                      alignment: Alignment.topCenter,
+                      child: _error == null
+                          ? const SizedBox(width: double.infinity)
+                          : Padding(
+                              padding: const EdgeInsets.only(top: 16),
+                              child: Container(
+                                padding:
+                                    const EdgeInsets.fromLTRB(14, 10, 6, 10),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.shade700
+                                      .withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: Colors.red.shade700
+                                        .withValues(alpha: 0.3),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.error_outline,
+                                      color: Colors.red.shade700,
+                                      size: 22,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        _error!,
+                                        style: TextStyle(
+                                          color: Colors.red.shade700,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      tooltip: 'Dismiss',
+                                      icon: Icon(
+                                        Icons.close,
+                                        size: 18,
+                                        color: Colors.red.shade700,
+                                      ),
+                                      onPressed: () =>
+                                          setState(() => _error = null),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                    ),
+
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      height: 52,
+                      child: FilledButton.icon(
+                        onPressed: _saving ? null : _save,
+                        icon: _saving
+                            ? const SizedBox(
+                                height: 18,
+                                width: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.save_outlined),
+                        label: Text(
+                          _saving
+                              ? 'Creating…'
+                              : _count > 0
+                                  ? 'Create type + $_count asset${_count == 1 ? '' : 's'}'
+                                  : 'Create type',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                          ),
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppTheme.maroon,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ],
-
-              const SizedBox(height: 24),
-              SizedBox(
-                height: 50,
-                child: ElevatedButton.icon(
-                  onPressed: _saving ? null : _save,
-                  icon: _saving
-                      ? const SizedBox(
-                          height: 18,
-                          width: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.save_outlined),
-                  label: Text(
-                    _saving
-                        ? 'Creating...'
-                        : 'CREATE TYPE + $_count ASSET(S)',
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.maroon,
-                    foregroundColor: Colors.white,
-                  ),
+                    ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _previewCard() {
+  Widget _previewCard(ColorScheme scheme) {
     final preview = _previewNumbers;
     final capped = _count > 20;
 
-    return Card(
-      elevation: 0,
-      color: Colors.grey.shade50,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.preview,
-                    color: AppTheme.maroon, size: 18),
-                const SizedBox(width: 8),
-                const Text(
-                  'Property Number Preview',
+    Widget hint(String text) => Text(
+          text,
+          style: TextStyle(
+            color: scheme.onSurfaceVariant,
+            fontStyle: FontStyle.italic,
+          ),
+        );
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.maroon.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppTheme.maroon.withValues(alpha: 0.15)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.preview_outlined,
+                  color: AppTheme.maroon, size: 20),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Property number preview',
                   style: TextStyle(
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w700,
                     color: AppTheme.maroon,
                   ),
                 ),
-                const Spacer(),
-                if (_count > 0)
-                  Text(
+              ),
+              if (_count > 0)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppTheme.maroon.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                  child: Text(
                     '$_count total',
                     style: const TextStyle(
                       fontSize: 12,
-                      color: Colors.black54,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.maroon,
                     ),
                   ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            if (_selectedLab == null)
-              const Text(
-                'Select a laboratory to see the preview.',
-                style: TextStyle(
-                    color: Colors.black54, fontStyle: FontStyle.italic),
-              )
-            else if (_nameController.text.trim().isEmpty)
-              const Text(
-                'Enter a name to see the preview.',
-                style: TextStyle(
-                    color: Colors.black54, fontStyle: FontStyle.italic),
-              )
-            else if (preview.isEmpty)
-              const Text(
-                'Enter a quantity to see the preview.',
-                style: TextStyle(
-                    color: Colors.black54, fontStyle: FontStyle.italic),
-              )
-            else
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.black12),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ...preview.map(
-                      (pn) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 1),
-                        child: Text(
-                          pn,
-                          style: const TextStyle(
-                            fontFamily: 'monospace',
-                            fontSize: 13,
-                          ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_selectedLab == null)
+            hint('Select a laboratory to see the preview.')
+          else if (_nameController.text.trim().isEmpty)
+            hint('Enter a name to see the preview.')
+          else if (preview.isEmpty)
+            hint('Enter a quantity to see the preview.')
+          else
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: scheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: scheme.outlineVariant),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 180),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: preview
+                            .map(
+                              (pn) => Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 2),
+                                child: Text(
+                                  pn,
+                                  style: const TextStyle(
+                                    fontFamily: 'monospace',
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ),
+                  ),
+                  if (capped)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        '… and ${_count - 20} more',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: scheme.onSurfaceVariant,
+                          fontStyle: FontStyle.italic,
                         ),
                       ),
                     ),
-                    if (capped)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text(
-                          '... and ${_count - 20} more',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.black54,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
+                ],
               ),
-          ],
-        ),
+            ),
+        ],
       ),
     );
   }

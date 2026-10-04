@@ -5,6 +5,7 @@ import '../../models/laboratory.dart';
 import '../../services/inventory_service.dart';
 import '../../services/laboratory_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/borrow_log_app_bar.dart';
 
 class AddEquipmentAssetScreen extends StatefulWidget {
   final List<EquipmentType> types;
@@ -214,7 +215,13 @@ class _AddEquipmentAssetScreenState extends State<AddEquipmentAssetScreen> {
     );
   }
 
+  void _stepCount(int delta) {
+    final next = (_count + delta).clamp(1, 500);
+    setState(() => _countController.text = '$next');
+  }
+
   Future<void> _submit() async {
+    FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) return;
     if (_selectedLab == null) {
       setState(() => _error = 'Please select a laboratory.');
@@ -277,360 +284,627 @@ class _AddEquipmentAssetScreenState extends State<AddEquipmentAssetScreen> {
     return 'Failed to create assets: $s';
   }
 
+  // ---------------------------------------------------------
+  // UI helpers
+  // ---------------------------------------------------------
+
+  Color _statusColor(String s) {
+    switch (s) {
+      case 'available':
+        return const Color(0xFF2E7D32);
+      case 'reserved':
+        return const Color(0xFFB26A00);
+      case 'borrowed':
+        return const Color(0xFF1565C0);
+      case 'maintenance':
+        return const Color(0xFFEF6C00);
+      case 'damaged':
+        return const Color(0xFFC62828);
+      default:
+        return const Color(0xFF616161);
+    }
+  }
+
+  InputDecoration _decoration(
+    String label, {
+    String? hint,
+    String? helper,
+    IconData? icon,
+    Widget? suffix,
+  }) {
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      helperText: helper,
+      helperMaxLines: 3,
+      prefixIcon: icon == null ? null : Icon(icon, size: 20),
+      suffixIcon: suffix,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+    );
+  }
+
+  Widget _section({
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    required List<Widget> children,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: AppTheme.maroon.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, size: 18, color: AppTheme.maroon),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleSmall
+                          ?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    if (subtitle != null)
+                      Text(
+                        subtitle,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ...children,
+        ],
+      ),
+    );
+  }
+
+  Widget _gap() => const SizedBox(height: 14);
+
+  String get _nameHelper {
+    if (_loadingTypes) return 'Loading types in this lab…';
+    if (_matchedType != null) {
+      return 'Matches existing type: ${_matchedType!.name}';
+    }
+    if (_nameController.text.trim().isEmpty) return 'Type the equipment name.';
+    return 'No exact match yet. Pick a suggestion or add the type first.';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
     if (_loadingLabs) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Add Equipment Assets')),
-        body: const Center(child: CircularProgressIndicator()),
+      return const Scaffold(
+        appBar: BorrowLogAppBar(title: 'Add equipment assets'),
+        body: Center(child: CircularProgressIndicator()),
       );
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Add Equipment Assets')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Laboratory
-              DropdownButtonFormField<Laboratory>(
-                initialValue: _selectedLab,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Laboratory *',
-                  border: OutlineInputBorder(),
-                ),
-                items: _labs
-                    .map((l) => DropdownMenuItem(
-                          value: l,
-                          child: Text(
-                            l.displayLabel,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ))
-                    .toList(),
-                onChanged: _saving
-                    ? null
-                    : (v) async {
-                        setState(() {
-                          _selectedLab = v;
-                          _nameController.clear();
-                          _matchedType = null;
-                          _showSuggestions = false;
-                        });
-                        if (v != null) await _loadTypesForLab(v.id);
-                      },
-                validator: (v) => v == null ? 'Required' : null,
-              ),
-              const SizedBox(height: 16),
-
-              // Equipment name (free text with suggestions)
-              TextFormField(
-                controller: _nameController,
-                enabled: !_saving,
-                onChanged: _onNameChanged,
-                decoration: InputDecoration(
-                  labelText: 'Equipment name *',
-                  hintText: 'Start typing… e.g. Keyboard',
-                  border: const OutlineInputBorder(),
-                  suffixIcon: _matchedType != null
-                      ? const Icon(Icons.check_circle, color: Colors.green)
-                      : null,
-                  helperText: _loadingTypes
-                      ? 'Loading types in this lab…'
-                      : _matchedType != null
-                          ? 'Matches existing type: ${_matchedType!.name}'
-                          : _nameController.text.trim().isEmpty
-                              ? 'Type the equipment name.'
-                              : 'No exact match yet. Pick a suggestion or '
-                                  'add the type first.',
-                ),
-              ),
-
-              // Suggestions
-              if (_showSuggestions && _suggestions.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    border: Border.all(color: Colors.black12),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Column(
-                    children: _suggestions
-                        .map(
-                          (t) => ListTile(
-                            dense: true,
-                            leading: const Icon(Icons.memory,
-                                size: 18, color: AppTheme.maroon),
-                            title: Text(t.name),
-                            onTap: () async {
-                              _nameController.text = t.name;
-                              setState(() {
-                                _matchedType = t;
-                                _showSuggestions = false;
-                              });
-                              await _refreshNextStart(t);
-                            },
-                          ),
-                        )
-                        .toList(),
-                  ),
-                ),
-              ],
-              const SizedBox(height: 16),
-
-              // Next-start info card (read-only)
-              if (_matchedType != null)
-                Card(
-                  elevation: 0,
-                  color: AppTheme.maroon.withValues(alpha: 0.06),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
+      appBar: const BorrowLogAppBar(title: 'Add equipment assets'),
+      body: SafeArea(
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 640),
+            child: SingleChildScrollView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+              child: Form(
+                key: _formKey,
+                autovalidateMode: AutovalidateMode.onUserInteraction,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // ---- Which equipment ----
+                    _section(
+                      icon: Icons.memory,
+                      title: 'Which equipment?',
+                      subtitle: 'Pick the lab, then the equipment type.',
                       children: [
-                        const Icon(Icons.info_outline,
-                            color: AppTheme.maroon, size: 20),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: _loadingStart
-                              ? const Text(
-                                  'Calculating next available number…',
-                                  style: TextStyle(fontSize: 13),
-                                )
-                              : Text(
-                                  'Next available: $_prefix-'
-                                  '${_nextStart.toString().padLeft(3, '0')}',
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    fontFamily: 'monospace',
+                        DropdownButtonFormField<Laboratory>(
+                          initialValue: _selectedLab,
+                          isExpanded: true,
+                          decoration: _decoration(
+                            'Laboratory *',
+                            icon: Icons.meeting_room_outlined,
+                          ),
+                          items: _labs
+                              .map(
+                                (l) => DropdownMenuItem(
+                                  value: l,
+                                  child: Text(
+                                    l.displayLabel,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: _saving
+                              ? null
+                              : (v) async {
+                                  setState(() {
+                                    _selectedLab = v;
+                                    _nameController.clear();
+                                    _matchedType = null;
+                                    _showSuggestions = false;
+                                  });
+                                  if (v != null) await _loadTypesForLab(v.id);
+                                },
+                          validator: (v) => v == null ? 'Required' : null,
+                        ),
+                        _gap(),
+                        TextFormField(
+                          controller: _nameController,
+                          enabled: !_saving,
+                          textCapitalization: TextCapitalization.words,
+                          onChanged: _onNameChanged,
+                          decoration: _decoration(
+                            'Equipment name *',
+                            hint: 'Start typing… e.g. Keyboard',
+                            icon: Icons.search,
+                            helper: _nameHelper,
+                            suffix: _matchedType != null
+                                ? Icon(
+                                    Icons.check_circle,
+                                    color: Colors.green.shade700,
+                                  )
+                                : null,
+                          ),
+                        ),
+
+                        // Suggestions
+                        if (_showSuggestions && _suggestions.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Container(
+                            decoration: BoxDecoration(
+                              color: scheme.surface,
+                              border: Border.all(color: scheme.outlineVariant),
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: Column(
+                              children: [
+                                for (var i = 0;
+                                    i < _suggestions.length;
+                                    i++) ...[
+                                  ListTile(
+                                    dense: true,
+                                    leading: const Icon(
+                                      Icons.memory,
+                                      size: 18,
+                                      color: AppTheme.maroon,
+                                    ),
+                                    title: Text(_suggestions[i].name),
+                                    trailing: const Icon(
+                                      Icons.north_west,
+                                      size: 16,
+                                    ),
+                                    onTap: () async {
+                                      final t = _suggestions[i];
+                                      _nameController.text = t.name;
+                                      setState(() {
+                                        _matchedType = t;
+                                        _showSuggestions = false;
+                                      });
+                                      await _refreshNextStart(t);
+                                    },
+                                  ),
+                                  if (i != _suggestions.length - 1)
+                                    Divider(
+                                      height: 1,
+                                      color: scheme.outlineVariant,
+                                    ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
+
+                        // Next-start info (read-only)
+                        AnimatedSize(
+                          duration: const Duration(milliseconds: 200),
+                          alignment: Alignment.topCenter,
+                          child: _matchedType == null
+                              ? const SizedBox(width: double.infinity)
+                              : Padding(
+                                  padding: const EdgeInsets.only(top: 14),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.maroon
+                                          .withValues(alpha: 0.06),
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.tag,
+                                          color: AppTheme.maroon,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: _loadingStart
+                                              ? const Text(
+                                                  'Calculating next available number…',
+                                                  style:
+                                                      TextStyle(fontSize: 13),
+                                                )
+                                              : Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      'Next available number',
+                                                      style: Theme.of(context)
+                                                          .textTheme
+                                                          .bodySmall
+                                                          ?.copyWith(
+                                                            color: scheme
+                                                                .onSurfaceVariant,
+                                                          ),
+                                                    ),
+                                                    Text(
+                                                      '$_prefix-'
+                                                      '${_nextStart.toString().padLeft(3, '0')}',
+                                                      style: const TextStyle(
+                                                        fontSize: 14,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        fontFamily: 'monospace',
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                         ),
                       ],
                     ),
-                  ),
-                ),
-              const SizedBox(height: 16),
+                    const SizedBox(height: 16),
 
-              // Quantity
-              TextFormField(
-                controller: _countController,
-                enabled: !_saving,
-                keyboardType: TextInputType.number,
-                onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
-                  labelText: 'Quantity *',
-                  hintText: 'How many to create',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) {
-                  final n = int.tryParse(v?.trim() ?? '');
-                  if (n == null || n <= 0) return 'Enter a number ≥ 1';
-                  if (n > 500) return 'Max 500';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Status
-              DropdownButtonFormField<String>(
-                initialValue: _status,
-                decoration: const InputDecoration(
-                  labelText: 'Status',
-                  border: OutlineInputBorder(),
-                ),
-                items: _statuses
-                    .map((s) => DropdownMenuItem(
-                          value: s,
-                          child: Text(
-                            s[0].toUpperCase() + s.substring(1),
+                    // ---- Units ----
+                    _section(
+                      icon: Icons.inventory_2_outlined,
+                      title: 'Units to add',
+                      subtitle: 'Numbers continue from the next available.',
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                controller: _countController,
+                                enabled: !_saving,
+                                keyboardType: TextInputType.number,
+                                textAlign: TextAlign.center,
+                                onChanged: (_) => setState(() {}),
+                                decoration: _decoration(
+                                  'Quantity *',
+                                  hint: 'How many to create',
+                                ),
+                                validator: (v) {
+                                  final n = int.tryParse(v?.trim() ?? '');
+                                  if (n == null || n <= 0) {
+                                    return 'Enter a number ≥ 1';
+                                  }
+                                  if (n > 500) return 'Max 500';
+                                  return null;
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Row(
+                                children: [
+                                  IconButton.filledTonal(
+                                    tooltip: 'Decrease',
+                                    onPressed: _saving || _count <= 1
+                                        ? null
+                                        : () => _stepCount(-1),
+                                    icon: const Icon(Icons.remove),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  IconButton.filledTonal(
+                                    tooltip: 'Increase',
+                                    onPressed: _saving || _count >= 500
+                                        ? null
+                                        : () => _stepCount(1),
+                                    icon: const Icon(Icons.add),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        _gap(),
+                        Text(
+                          'Status',
+                          style: Theme.of(context).textTheme.labelLarge,
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: _statuses.map((s) {
+                            return ChoiceChip(
+                              avatar: Container(
+                                width: 10,
+                                height: 10,
+                                decoration: BoxDecoration(
+                                  color: _statusColor(s),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              label: Text(s[0].toUpperCase() + s.substring(1)),
+                              selected: _status == s,
+                              onSelected: _saving
+                                  ? null
+                                  : (_) => setState(() => _status = s),
+                            );
+                          }).toList(),
+                        ),
+                        _gap(),
+                        TextFormField(
+                          controller: _notesController,
+                          enabled: !_saving,
+                          maxLines: 2,
+                          textCapitalization: TextCapitalization.sentences,
+                          decoration: _decoration(
+                            'Condition notes',
+                            helper: 'Applies to every unit created.',
+                            icon: Icons.sticky_note_2_outlined,
                           ),
-                        ))
-                    .toList(),
-                onChanged: _saving
-                    ? null
-                    : (v) => setState(() => _status = v ?? 'available'),
-              ),
-              const SizedBox(height: 16),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
 
-              // Notes
-              TextFormField(
-                controller: _notesController,
-                enabled: !_saving,
-                maxLines: 2,
-                decoration: const InputDecoration(
-                  labelText: 'Condition notes',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 20),
+                    // ---- Preview ----
+                    _previewCard(scheme),
 
-              // Preview
-              _previewCard(),
+                    // ---- Error ----
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 200),
+                      alignment: Alignment.topCenter,
+                      child: _error == null
+                          ? const SizedBox(width: double.infinity)
+                          : Padding(
+                              padding: const EdgeInsets.only(top: 16),
+                              child: Container(
+                                padding:
+                                    const EdgeInsets.fromLTRB(14, 10, 6, 10),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.shade700
+                                      .withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: Colors.red.shade700
+                                        .withValues(alpha: 0.3),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.error_outline,
+                                      color: Colors.red.shade700,
+                                      size: 22,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        _error!,
+                                        style: TextStyle(
+                                          color: Colors.red.shade700,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      tooltip: 'Dismiss',
+                                      icon: Icon(
+                                        Icons.close,
+                                        size: 18,
+                                        color: Colors.red.shade700,
+                                      ),
+                                      onPressed: () =>
+                                          setState(() => _error = null),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                    ),
 
-              if (_error != null) ...[
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.red.shade200),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.error_outline,
-                          color: Colors.red.shade700, size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _error!,
-                          style: TextStyle(color: Colors.red.shade700),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      height: 52,
+                      child: FilledButton.icon(
+                        onPressed: _saving ? null : _submit,
+                        icon: _saving
+                            ? const SizedBox(
+                                height: 18,
+                                width: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.playlist_add),
+                        label: Text(
+                          _saving
+                              ? 'Creating…'
+                              : _count > 0
+                                  ? 'Create $_count asset${_count == 1 ? '' : 's'}'
+                                  : 'Create assets',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                          ),
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppTheme.maroon,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ],
-
-              const SizedBox(height: 24),
-              SizedBox(
-                height: 50,
-                child: ElevatedButton.icon(
-                  onPressed: _saving ? null : _submit,
-                  icon: _saving
-                      ? const SizedBox(
-                          height: 18,
-                          width: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.playlist_add),
-                  label: Text(
-                    _saving
-                        ? 'Creating…'
-                        : 'CREATE $_count ASSET(S)',
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.maroon,
-                    foregroundColor: Colors.white,
-                  ),
+                    ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _previewCard() {
+  Widget _previewCard(ColorScheme scheme) {
     final preview = _previewNumbers;
     final capped = _count > 20;
 
-    return Card(
-      elevation: 0,
-      color: Colors.grey.shade50,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.preview,
-                    color: AppTheme.maroon, size: 18),
-                const SizedBox(width: 8),
-                const Text(
-                  'Property Number Preview',
+    Widget hint(String text) => Text(
+          text,
+          style: TextStyle(
+            color: scheme.onSurfaceVariant,
+            fontStyle: FontStyle.italic,
+          ),
+        );
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.maroon.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppTheme.maroon.withValues(alpha: 0.15)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.preview_outlined,
+                  color: AppTheme.maroon, size: 20),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Property number preview',
                   style: TextStyle(
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w700,
                     color: AppTheme.maroon,
                   ),
                 ),
-                const Spacer(),
-                if (_count > 0)
-                  Text(
+              ),
+              if (_count > 0)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppTheme.maroon.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                  child: Text(
                     '$_count total',
                     style: const TextStyle(
                       fontSize: 12,
-                      color: Colors.black54,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.maroon,
                     ),
                   ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            if (_prefix.isEmpty)
-              const Text(
-                'Enter or pick an equipment name to see the preview.',
-                style: TextStyle(
-                    color: Colors.black54, fontStyle: FontStyle.italic),
-              )
-            else if (_matchedType == null)
-              const Text(
-                'Pick a matching type to compute the next number.',
-                style: TextStyle(
-                    color: Colors.black54, fontStyle: FontStyle.italic),
-              )
-            else if (_loadingStart)
-              const Text(
-                'Calculating…',
-                style: TextStyle(
-                    color: Colors.black54, fontStyle: FontStyle.italic),
-              )
-            else if (preview.isEmpty)
-              const Text(
-                'Enter a quantity to see the preview.',
-                style: TextStyle(
-                    color: Colors.black54, fontStyle: FontStyle.italic),
-              )
-            else
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.black12),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ...preview.map(
-                      (pn) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 1),
-                        child: Text(
-                          pn,
-                          style: const TextStyle(
-                            fontFamily: 'monospace',
-                            fontSize: 13,
-                          ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_prefix.isEmpty)
+            hint('Enter or pick an equipment name to see the preview.')
+          else if (_matchedType == null)
+            hint('Pick a matching type to compute the next number.')
+          else if (_loadingStart)
+            hint('Calculating…')
+          else if (preview.isEmpty)
+            hint('Enter a quantity to see the preview.')
+          else
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: scheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: scheme.outlineVariant),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 180),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: preview
+                            .map(
+                              (pn) => Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 2),
+                                child: Text(
+                                  pn,
+                                  style: const TextStyle(
+                                    fontFamily: 'monospace',
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ),
+                  ),
+                  if (capped)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        '… and ${_count - 20} more',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: scheme.onSurfaceVariant,
+                          fontStyle: FontStyle.italic,
                         ),
                       ),
                     ),
-                    if (capped)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text(
-                          '… and ${_count - 20} more',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.black54,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
+                ],
               ),
-          ],
-        ),  
+            ),
+        ],
       ),
     );
   }

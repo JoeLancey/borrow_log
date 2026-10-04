@@ -251,6 +251,11 @@ class AuthService {
   /// Map raw Supabase auth errors to friendly messages.
   String _mapAuthError(String message) {
     final lower = message.toLowerCase();
+    if (lower.contains('invalid api key') ||
+        lower.contains('apikey') && lower.contains('invalid')) {
+      return 'Supabase configuration is invalid. Please use the current '
+          'publishable or anon key for this project.';
+    }
     if (lower.contains('invalid login credentials')) {
       return 'Invalid email or password.';
     }

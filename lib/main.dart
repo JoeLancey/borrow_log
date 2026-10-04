@@ -16,7 +16,7 @@ import 'services/auth_service.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  final config = AppConfig.fromEnvironment()..validate();
+  final config = AppConfig.fromEnvironment();
   runApp(BorrowLogApp(config: config));
 }
 
@@ -36,6 +36,7 @@ class BorrowLogApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return Builder(
       builder: (context) {
+        final currentConfig = config;
         final mediaQuery = MediaQuery.of(context);
         return MediaQuery(
           data: mediaQuery,
@@ -56,9 +57,11 @@ class BorrowLogApp extends StatelessWidget {
                 ),
               ],
             ),
-            home: config == null
+            home: currentConfig == null
               ? const _AuthEntryPoint()
-              : _StartupGate(config: config!),
+              : currentConfig.isValid
+                ? _StartupGate(config: currentConfig)
+                : const _ConfigurationErrorScreen(),
           ),
         );
       },
@@ -248,5 +251,43 @@ class _AuthEntryPointState extends State<_AuthEntryPoint> {
     if (_role == 'student') return const StudentDashboard();
     if (_role == 'staff') return const StaffDashboard();
     return const LoginScreen();
+  }
+}
+
+class _ConfigurationErrorScreen extends StatelessWidget {
+  const _ConfigurationErrorScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.xl),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.settings_outlined,
+                size: 56,
+                color: theme.colorScheme.error,
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              Text(
+                'App configuration is missing',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.titleLarge,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              const Text(
+                'Run this build with SUPABASE_URL and either '
+                'SUPABASE_PUBLISHABLE_KEY or SUPABASE_ANON_KEY.',
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

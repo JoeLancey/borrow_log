@@ -36,7 +36,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed: $e')),
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text('Failed: $e'),
+        ),
       );
     }
   }
@@ -64,11 +67,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF6F5F4),
       appBar: AppBar(
         title: const Text('Notifications'),
         actions: [
           IconButton(
-            tooltip: 'Mark all read',
+            tooltip: 'Mark all as read',
             icon: const Icon(Icons.done_all),
             onPressed: _markAllRead,
           ),
@@ -81,15 +85,20 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           future: _future,
           builder: (context, snap) {
             if (snap.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
+              return const BorrowLogSkeletonList(itemCount: 6);
             }
             if (snap.hasError) {
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Text('Failed to load:\n${snap.error}',
-                      textAlign: TextAlign.center),
-                ),
+              return ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: [
+                  SizedBox(
+                    height: MediaQuery.of(context).size.height * 0.6,
+                    child: BorrowLogErrorState(
+                      message: 'Failed to load notifications:\n${snap.error}',
+                      onRetry: _refresh,
+                    ),
+                  ),
+                ],
               );
             }
             final list = snap.data ?? [];
@@ -105,11 +114,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 ],
               );
             }
-            return ListView.separated(
+
+            final unread = list.where((n) => n.isUnread).length;
+
+            return ListView.builder(
               physics: const AlwaysScrollableScrollPhysics(),
-              itemCount: list.length,
-              separatorBuilder: (_, _) => const Divider(height: 1),
-              itemBuilder: (_, i) => _tile(list[i]),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+              itemCount: list.length + 1,
+              itemBuilder: (_, i) {
+                if (i == 0) return _summary(unread, list.length);
+                return _tile(list[i - 1]);
+              },
             );
           },
         ),
@@ -117,49 +132,133 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     );
   }
 
-  Widget _tile(AppNotification n) {
-    final icon = _iconFor(n.kind);
-    final color = _colorFor(n.kind);
-
-    return ListTile(
-      onTap: () => _open(n),
-      leading: CircleAvatar(
-        backgroundColor: color.withValues(alpha: 0.12),
-        child: Icon(icon, color: color, size: 20),
-      ),
-      title: Text(
-        n.title,
-        style: TextStyle(
-          fontWeight: n.isUnread ? FontWeight.bold : FontWeight.normal,
-        ),
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _summary(int unread, int total) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(2, 8, 2, 6),
+      child: Row(
         children: [
-          if (n.body != null && n.body!.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Text(n.body!, style: const TextStyle(fontSize: 13)),
+          Text(
+            unread > 0 ? '$unread unread' : 'All read',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: unread > 0 ? AppTheme.maroon : Colors.black54,
             ),
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(
-              n.relativeTime,
-              style: const TextStyle(fontSize: 11, color: Colors.black45),
-            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            'of $total',
+            style: const TextStyle(fontSize: 13, color: Colors.black45),
           ),
         ],
       ),
-      trailing: n.isUnread
-          ? Container(
-              width: 10,
-              height: 10,
-              decoration: const BoxDecoration(
-                color: AppTheme.maroon,
-                shape: BoxShape.circle,
+    );
+  }
+
+  Widget _tile(AppNotification n) {
+    final icon = _iconFor(n.kind);
+    final color = _colorFor(n.kind);
+    final hasBody = n.body != null && n.body!.isNotEmpty;
+    final opensSlip = n.reservationId != null;
+
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      clipBehavior: Clip.antiAlias,
+      color: n.isUnread ? const Color(0xFFFFF8F8) : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(
+          color: n.isUnread
+              ? AppTheme.maroon.withValues(alpha: 0.25)
+              : const Color(0x14000000),
+        ),
+      ),
+      child: InkWell(
+        onTap: () => _open(n),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                radius: 20,
+                backgroundColor: color.withValues(alpha: 0.12),
+                child: Icon(icon, color: color, size: 21),
               ),
-            )
-          : null,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      n.title,
+                      style: TextStyle(
+                        fontSize: 14.5,
+                        height: 1.25,
+                        fontWeight:
+                            n.isUnread ? FontWeight.w700 : FontWeight.w500,
+                      ),
+                    ),
+                    if (hasBody)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 3),
+                        child: Text(
+                          n.body!,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            height: 1.35,
+                            color: Colors.black54,
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Icon(Icons.schedule,
+                            size: 12, color: Colors.black38),
+                        const SizedBox(width: 4),
+                        Text(
+                          n.relativeTime,
+                          style: const TextStyle(
+                              fontSize: 11.5, color: Colors.black45),
+                        ),
+                        if (opensSlip) ...[
+                          const Spacer(),
+                          const Text(
+                            'View slip',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.maroon,
+                            ),
+                          ),
+                          const Icon(Icons.chevron_right,
+                              size: 16, color: AppTheme.maroon),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              if (n.isUnread)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8, top: 6),
+                  child: Container(
+                    width: 10,
+                    height: 10,
+                    decoration: const BoxDecoration(
+                      color: AppTheme.maroon,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

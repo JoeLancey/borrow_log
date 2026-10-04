@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
+import '../../services/google_auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_components.dart';
 import '../shared/change_password_screen.dart';
@@ -18,10 +19,14 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _authService = AuthService();
+  final _googleAuthService = GoogleAuthService();
 
   bool _isLoading = false;
+  bool _isGoogleLoading = false;
   String? _errorMessage;
   bool _obscurePassword = true;
+
+  bool get _busy => _isLoading || _isGoogleLoading;
 
   @override
   void dispose() {
@@ -30,41 +35,9 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  Future<void> _handleLogin() async {
-    if (_isLoading) return;
-
-    final email = _emailController.text.trim();
-    final password = _passwordController.text;
-
-    if (email.isEmpty || password.isEmpty) {
-      setState(() {
-        _errorMessage = 'Please enter your email and password.';
-      });
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    final result = await _authService.login(
-      email: email,
-      password: password,
-    );
-
-    if (!mounted) return;
-
-    if (!result.success) {
-      setState(() {
-        _isLoading = false;
-        _errorMessage = result.errorMessage ?? 'Login failed.';
-      });
-      return;
-    }
-
-    setState(() => _isLoading = false);
-
+  /// Shared post-authentication flow for both email and Google logins.
+  /// Handles the forced password change and role-based navigation.
+  Future<void> _handleAuthResult(AuthResult result) async {
     // Force password change for newly provisioned accounts.
     if (result.mustChangePassword) {
       final changed = await Navigator.of(context).push<bool>(
@@ -100,6 +73,67 @@ class _LoginScreenState extends State<LoginScreen> {
         _errorMessage = 'Invalid or missing role. Please contact support.';
       });
     }
+  }
+
+  Future<void> _handleLogin() async {
+    if (_busy) return;
+
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (email.isEmpty || password.isEmpty) {
+      setState(() {
+        _errorMessage = 'Please enter your email and password.';
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    final result = await _authService.login(
+      email: email,
+      password: password,
+    );
+
+    if (!mounted) return;
+
+    if (!result.success) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = result.errorMessage ?? 'Login failed.';
+      });
+      return;
+    }
+
+    setState(() => _isLoading = false);
+    await _handleAuthResult(result);
+  }
+
+  Future<void> _handleGoogleLogin() async {
+    if (_busy) return;
+
+    setState(() {
+      _isGoogleLoading = true;
+      _errorMessage = null;
+    });
+
+    final result = await _googleAuthService.signInWithGoogle();
+
+    if (!mounted) return;
+
+    if (!result.success) {
+      setState(() {
+        _isGoogleLoading = false;
+        _errorMessage = result.errorMessage ?? 'Google sign-in failed.';
+      });
+      return;
+    }
+
+    setState(() => _isGoogleLoading = false);
+    await _handleAuthResult(result);
   }
 
   @override
@@ -215,22 +249,26 @@ class _LoginScreenState extends State<LoginScreen> {
             Text('Sign in with your UM account to continue.',
                 style: theme.textTheme.bodyMedium),
             const SizedBox(height: AppSpacing.xl),
+
+            // Email
             AppTextField(
               controller: _emailController,
               label: 'UM email',
               hint: 'name@umindanao.edu.ph',
               prefixIcon: Icons.email_outlined,
-              enabled: !_isLoading,
+              enabled: !_busy,
               keyboardType: TextInputType.emailAddress,
               textCapitalization: TextCapitalization.none,
               textInputAction: TextInputAction.next,
             ),
             const SizedBox(height: AppSpacing.lg),
+
+            // Password
             AppTextField(
               controller: _passwordController,
               label: 'Password',
               prefixIcon: Icons.lock_outline,
-              enabled: !_isLoading,
+              enabled: !_busy,
               obscureText: _obscurePassword,
               textInputAction: TextInputAction.done,
               onSubmitted: (_) => _handleLogin(),
@@ -241,15 +279,18 @@ class _LoginScreenState extends State<LoginScreen> {
                     : Icons.visibility_off_outlined),
                 onPressed: () => setState(
                     () => _obscurePassword = !_obscurePassword),
-              ),                                            
+              ),
             ),
+
             Align(
               alignment: Alignment.centerRight,
               child: TextButton(
-                onPressed: _isLoading ? null : _showForgotPassword,
+                onPressed: _busy ? null : _showForgotPassword,
                 child: const Text('Forgot password?'),
               ),
             ),
+
+            // Error banner
             if (_errorMessage != null) ...[
               const SizedBox(height: AppSpacing.lg),
               Semantics(
@@ -275,7 +316,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
             ],
+
             const SizedBox(height: AppSpacing.xl),
+
+            // Sign in with email
             SizedBox(
               width: double.infinity,
               child: AppButton(
@@ -283,6 +327,38 @@ class _LoginScreenState extends State<LoginScreen> {
                 icon: Icons.arrow_forward,
                 loading: _isLoading,
                 onPressed: _handleLogin,
+              ),
+            ),
+
+            // OR divider
+            const SizedBox(height: AppSpacing.lg),
+            Row(
+              children: [
+                const Expanded(child: Divider()),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.md),
+                  child: Text(
+                    'OR',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ),
+                const Expanded(child: Divider()),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.lg),
+
+            // Sign in with Google
+            SizedBox(
+              width: double.infinity,
+              child: AppButton(
+                label: 'Sign in with Google',
+                icon: Icons.g_mobiledata,
+                loading: _isGoogleLoading,
+                onPressed: _handleGoogleLogin,
               ),
             ),
           ],
@@ -304,7 +380,8 @@ class _LoginScreenState extends State<LoginScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('Enter your UM email and we will send you a secure reset link.'),
+              const Text(
+                  'Enter your UM email and we will send you a secure reset link.'),
               const SizedBox(height: AppSpacing.lg),
               TextField(
                 controller: emailController,
@@ -317,13 +394,14 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               if (error != null) ...[
                 const SizedBox(height: AppSpacing.sm),
-                Text(error!, style: TextStyle(color: Colors.red)),
+                Text(error!, style: const TextStyle(color: Colors.red)),
               ],
             ],
           ),
           actions: [
             TextButton(
-              onPressed: loading ? null : () => Navigator.of(dialogContext).pop(),
+              onPressed:
+                  loading ? null : () => Navigator.of(dialogContext).pop(),
               child: const Text('Cancel'),
             ),
             FilledButton(
@@ -332,14 +410,16 @@ class _LoginScreenState extends State<LoginScreen> {
                   : () async {
                       final email = emailController.text.trim();
                       if (email.isEmpty) {
-                        setDialogState(() => error = 'Enter your UM email address.');
+                        setDialogState(
+                            () => error = 'Enter your UM email address.');
                         return;
                       }
                       setDialogState(() {
                         loading = true;
                         error = null;
                       });
-                      final result = await _authService.requestPasswordReset(email: email);
+                      final result = await _authService
+                          .requestPasswordReset(email: email);
                       if (!dialogContext.mounted) return;
                       if (!result.success) {
                         setDialogState(() {
@@ -350,11 +430,16 @@ class _LoginScreenState extends State<LoginScreen> {
                       }
                       Navigator.of(dialogContext).pop();
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Check your email for a secure password reset link.')),
+                        const SnackBar(
+                            content: Text(
+                                'Check your email for a secure password reset link.')),
                       );
                     },
               child: loading
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2))
                   : const Text('Send link'),
             ),
           ],

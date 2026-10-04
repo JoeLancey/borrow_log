@@ -6,19 +6,15 @@ class UmBrandMark extends StatelessWidget {
   final double size;
   final bool showLabel;
 
-  const UmBrandMark({
-    super.key,
-    this.size = 72,
-    this.showLabel = true,
-  });
+  const UmBrandMark({super.key, this.size = 72, this.showLabel = true});
 
   @override
   Widget build(BuildContext context) {
     final labelStyle = Theme.of(context).textTheme.labelMedium?.copyWith(
-          color: Colors.white,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 1.1,
-        );
+      color: Colors.white,
+      fontWeight: FontWeight.w600,
+      letterSpacing: 1.1,
+    );
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -92,7 +88,10 @@ class AppButton extends StatelessWidget {
       return TextButton(onPressed: loading ? null : onPressed, child: child);
     }
     if (variant == AppButtonVariant.secondary) {
-      return OutlinedButton(onPressed: loading ? null : onPressed, child: child);
+      return OutlinedButton(
+        onPressed: loading ? null : onPressed,
+        child: child,
+      );
     }
     if (variant == AppButtonVariant.tonal) {
       return FilledButton.tonal(
@@ -100,10 +99,7 @@ class AppButton extends StatelessWidget {
         child: child,
       );
     }
-    return ElevatedButton(
-      onPressed: loading ? null : onPressed,
-      child: child,
-    );
+    return ElevatedButton(onPressed: loading ? null : onPressed, child: child);
   }
 }
 
@@ -172,6 +168,7 @@ class StatCard extends StatelessWidget {
   final IconData icon;
   final Color? accent;
   final String? detail;
+  final VoidCallback? onTap;
 
   const StatCard({
     super.key,
@@ -180,29 +177,134 @@ class StatCard extends StatelessWidget {
     required this.icon,
     this.accent,
     this.detail,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final color = accent ?? Theme.of(context).colorScheme.primary;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: color),
-            const SizedBox(height: AppSpacing.md),
-            Text(value, style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: AppSpacing.xs),
-            Text(label, style: Theme.of(context).textTheme.labelMedium),
-            if (detail != null) ...[
-              const SizedBox(height: AppSpacing.xs),
-              Text(detail!, style: Theme.of(context).textTheme.bodySmall),
-            ],
-          ],
+    return Semantics(
+      button: onTap != null,
+      label: '$label: $value',
+      child: Card(
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 112),
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, color: color),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(value, style: Theme.of(context).textTheme.headlineSmall),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(label, style: Theme.of(context).textTheme.labelMedium),
+                  if (detail != null) ...[
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(detail!, style: Theme.of(context).textTheme.bodySmall),
+                  ],
+                ],
+              ),
+            ),
+          ),
         ),
       ),
+    );
+  }
+}
+
+class AppSearchBar extends StatelessWidget {
+  const AppSearchBar({
+    super.key,
+    required this.controller,
+    required this.hintText,
+    this.onChanged,
+    this.onClear,
+  });
+
+  final TextEditingController controller;
+  final String hintText;
+  final ValueChanged<String>? onChanged;
+  final VoidCallback? onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      onChanged: onChanged,
+      textInputAction: TextInputAction.search,
+      decoration: InputDecoration(
+        hintText: hintText,
+        prefixIcon: const Icon(Icons.search),
+        suffixIcon: controller.text.isEmpty
+            ? null
+            : IconButton(
+                tooltip: 'Clear search',
+                onPressed: onClear,
+                icon: const Icon(Icons.clear),
+              ),
+      ),
+    );
+  }
+}
+
+class ConfirmDialog extends StatelessWidget {
+  const ConfirmDialog({
+    super.key,
+    required this.title,
+    required this.message,
+    required this.confirmLabel,
+    this.danger = false,
+  });
+
+  final String title;
+  final String message;
+  final String confirmLabel;
+  final bool danger;
+
+  static Future<bool> show(
+    BuildContext context, {
+    required String title,
+    required String message,
+    required String confirmLabel,
+    bool danger = false,
+  }) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (_) => ConfirmDialog(
+            title: title,
+            message: message,
+            confirmLabel: confirmLabel,
+            danger: danger,
+          ),
+        ) ??
+        false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(title),
+      content: Text(message),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          style: danger
+              ? FilledButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.error,
+                )
+              : null,
+          onPressed: () => Navigator.pop(context, true),
+          child: Text(confirmLabel),
+        ),
+      ],
     );
   }
 }
@@ -245,12 +347,7 @@ class AppCard extends StatelessWidget {
   final EdgeInsetsGeometry? padding;
   final Color? color;
 
-  const AppCard({
-    super.key,
-    required this.child,
-    this.padding,
-    this.color,
-  });
+  const AppCard({super.key, required this.child, this.padding, this.color});
 
   @override
   Widget build(BuildContext context) {

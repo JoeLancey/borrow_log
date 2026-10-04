@@ -101,49 +101,56 @@ class _StudentDashboardState extends State<StudentDashboard> {
     );
   }
 
+  /// UX: ask before signing out so a mis-tap doesn't end the session.
+  Future<void> _confirmLogout() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Log out?'),
+        content: const Text('You will need to sign in again to continue.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.maroon),
+            child: const Text('Log out'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) await _logout();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+
     return Scaffold(
       backgroundColor: AppColors.neutral100,
       appBar: BorrowLogAppBar(
         title: 'BorrowLog',
         actions: [
-          Stack(
-            alignment: Alignment.topRight,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.notifications_none_rounded),
-                tooltip: 'Notifications',
-                onPressed: _openNotifications,
-              ),
-              if (_unread > 0)
-                IgnorePointer(
-                  child: Container(
-                    margin: const EdgeInsets.only(top: 8, right: 8),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 5,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.gold500,
-                      borderRadius: BorderRadius.circular(AppRadius.pill),
-                    ),
-                    child: Text(
-                      _unread > 99 ? '99+' : '$_unread',
-                      style: const TextStyle(
-                        color: AppColors.maroon900,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
+          IconButton(
+            tooltip: _unread > 0
+                ? 'Notifications, $_unread unread'
+                : 'Notifications',
+            onPressed: _openNotifications,
+            icon: Badge(
+              isLabelVisible: _unread > 0,
+              label: Text(_unread > 99 ? '99+' : '$_unread'),
+              backgroundColor: AppColors.gold500,
+              textColor: AppColors.maroon900,
+              child: const Icon(Icons.notifications_none_rounded),
+            ),
           ),
           IconButton(
             icon: const Icon(Icons.logout_rounded),
-            tooltip: 'Logout',
-            onPressed: _logout,
+            tooltip: 'Log out',
+            onPressed: _confirmLogout,
           ),
         ],
       ),
@@ -157,7 +164,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(
                   AppSpacing.xl,
-                  AppSpacing.xl,
+                  AppSpacing.lg,
                   AppSpacing.xl,
                   AppSpacing.xxl,
                 ),
@@ -167,7 +174,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
                       ? _profileSkeleton()
                       : Text(
                           'Welcome back, $_firstName',
-                          style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                          style: textTheme.displaySmall?.copyWith(
                             fontWeight: FontWeight.w700,
                             letterSpacing: -1.2,
                           ),
@@ -177,7 +184,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
                   const SizedBox(height: AppSpacing.sm),
                   Text(
                     'Reserve laboratory equipment and keep every loan on track.',
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    style: textTheme.bodyLarge?.copyWith(
                       height: 1.45,
                       color: AppColors.ink700,
                     ),
@@ -186,29 +193,21 @@ class _StudentDashboardState extends State<StudentDashboard> {
                   FutureBuilder<_StudentSummary>(
                     future: _summary,
                     builder: (context, snapshot) {
-                      if (!snapshot.hasData) {
-                        return const SizedBox.shrink();
-                      }
+                      if (snapshot.hasError) return _summaryError();
+                      if (!snapshot.hasData) return _summarySkeleton();
                       return _summaryCard(snapshot.data!);
                     },
                   ),
                   const SizedBox(height: AppSpacing.xl),
                   Text(
                     'Quick actions',
-                    style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                      fontSize: 28,
+                    style: textTheme.titleLarge?.copyWith(
+                      fontSize: 20,
                       fontWeight: FontWeight.w700,
-                      letterSpacing: -0.7,
+                      letterSpacing: -0.3,
                     ),
                   ),
-                  const SizedBox(height: AppSpacing.xs),
-                  Text(
-                    'Start with what you need today',
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: AppColors.ink500,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
+                  const SizedBox(height: AppSpacing.md),
                   LayoutBuilder(
                     builder: (context, constraints) {
                       final actionWidth = constraints.maxWidth >= 640
@@ -257,10 +256,13 @@ class _StudentDashboardState extends State<StudentDashboard> {
     );
   }
 
+  // ───────────────────────── Summary ─────────────────────────
+
   Widget _summaryCard(_StudentSummary summary) {
     final dueText = summary.nextDue == null
         ? 'No active due date'
         : 'Next due: ${summary.nextDue!.month.toString().padLeft(2, '0')}/${summary.nextDue!.day.toString().padLeft(2, '0')}';
+    final hasOverdue = summary.overdue > 0;
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -274,69 +276,99 @@ class _StudentDashboardState extends State<StudentDashboard> {
           ],
         ),
         borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF7D0B18).withValues(alpha: 0.25),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             'Your borrowing snapshot',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
               color: Colors.white,
               fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 18),
-          Row(
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: _summaryMetric(
+                    '${summary.activeLoans}',
+                    'Active loans',
+                    isHighlighted: false,
+                  ),
+                ),
+                const VerticalDivider(
+                  width: 1,
+                  thickness: 1,
+                  color: Colors.white24,
+                ),
+                Expanded(
+                  child: _summaryMetric(
+                    '${summary.pending}',
+                    'Pending',
+                    isHighlighted: false,
+                  ),
+                ),
+                const VerticalDivider(
+                  width: 1,
+                  thickness: 1,
+                  color: Colors.white24,
+                ),
+                Expanded(
+                  child: _summaryMetric(
+                    '${summary.overdue}',
+                    'Overdue',
+                    isHighlighted: hasOverdue,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
-              Expanded(
-                child: _summaryMetric(
-                  '${summary.activeLoans}',
-                  'Active loans',
-                  isHighlighted: false,
+              _infoPill(Icons.event_outlined, dueText, Colors.white70),
+              if (hasOverdue)
+                _infoPill(
+                  Icons.warning_amber_rounded,
+                  '${summary.overdue} overdue — return soon',
+                  AppColors.gold300,
                 ),
-              ),
-              const VerticalDivider(
-                width: 1,
-                thickness: 1,
-                color: Colors.white24,
-              ),
-              Expanded(
-                child: _summaryMetric(
-                  '${summary.pending}',
-                  'Pending',
-                  isHighlighted: false,
-                ),
-              ),
-              const VerticalDivider(
-                width: 1,
-                thickness: 1,
-                color: Colors.white24,
-              ),
-              Expanded(
-                child: _summaryMetric(
-                  '${summary.overdue}',
-                  'Overdue',
-                  isHighlighted: summary.overdue > 0,
-                ),
-              ),
             ],
           ),
-          const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text(
-                dueText,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Colors.white70,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
+        ],
+      ),
+    );
+  }
+
+  Widget _infoPill(IconData icon, String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
+          Text(
+            text,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
@@ -344,66 +376,49 @@ class _StudentDashboardState extends State<StudentDashboard> {
     );
   }
 
-  Widget _actionCard({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(20),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFFDECEC),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  icon,
-                  color: AppTheme.maroon,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      title,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontSize: 20,
-                        letterSpacing: -0.4,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppColors.ink500,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.arrow_forward_rounded, size: 24),
-            ],
-          ),
+  Widget _summarySkeleton() {
+    return Container(
+      height: 168,
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      alignment: Alignment.center,
+      child: const SizedBox(
+        width: 24,
+        height: 24,
+        child: CircularProgressIndicator(
+          strokeWidth: 2.5,
+          color: AppTheme.maroon,
         ),
+      ),
+    );
+  }
+
+  Widget _summaryError() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.cloud_off_rounded, color: Colors.red),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'Couldn\'t load your borrowing snapshot.',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          TextButton(
+            onPressed: _refresh,
+            style: TextButton.styleFrom(foregroundColor: AppTheme.maroon),
+            child: const Text('Try again'),
+          ),
+        ],
       ),
     );
   }
@@ -420,9 +435,9 @@ class _StudentDashboardState extends State<StudentDashboard> {
             child: Text(
               value,
               style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                color: Colors.white,
+                color: isHighlighted ? AppColors.gold300 : Colors.white,
                 fontWeight: FontWeight.w700,
-                fontSize: 28,
+                fontSize: 30,
                 letterSpacing: -0.8,
               ),
             ),
@@ -443,17 +458,90 @@ class _StudentDashboardState extends State<StudentDashboard> {
     );
   }
 
-  Widget _profileSkeleton() {
-    return Container(
-      width: 200,
-      height: 28,
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(12),
+  // ───────────────────────── Actions ─────────────────────────
+
+  Widget _actionCard({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.white,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: Color(0x14000000)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFDECEC),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(
+                  icon,
+                  color: AppTheme.maroon,
+                  size: 26,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.3,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppColors.ink500,
+                        height: 1.3,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(Icons.chevron_right_rounded,
+                  size: 26, color: AppTheme.maroon),
+            ],
+          ),
+        ),
       ),
     );
   }
 
+  Widget _profileSkeleton() {
+    return Container(
+      width: 220,
+      height: 34,
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(12),
+      ),
+    );
+  }
 }
 
 class _StudentSummary {

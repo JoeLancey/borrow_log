@@ -27,6 +27,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
   final _inventoryService = InventoryService();
 
   late Future<_ReportData> _future;
+  String _range = 'month';
+
+  // UI-only: which donut slice is currently touched.
+  int _touchedPie = -1;
 
   @override
   void initState() {
@@ -58,27 +62,50 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Future<void> _exportCsv(_ReportData data) async {
     final selected = await showModalBottomSheet<String>(
       context: context,
+      showDragHandle: true,
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const ListTile(
-              title: Text('Export as CSV'),
-              subtitle: Text('Choose what to export'),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Export as CSV',
+                    style: Theme.of(ctx).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Choose what to export',
+                    style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                ],
+              ),
             ),
-            const Divider(height: 1),
             ListTile(
-              leading: const Icon(Icons.event_note_outlined),
+              leading: const _IconTile(
+                icon: Icons.event_note_outlined,
+                color: AppTheme.maroon,
+              ),
               title: const Text('Reservations'),
               subtitle: Text('${data.reservations.length} row(s)'),
               onTap: () => Navigator.pop(ctx, 'reservations'),
             ),
             ListTile(
-              leading: const Icon(Icons.inventory_2_outlined),
+              leading: const _IconTile(
+                icon: Icons.inventory_2_outlined,
+                color: AppTheme.maroon,
+              ),
               title: const Text('Inventory'),
               subtitle: Text('${data.assets.length} row(s)'),
               onTap: () => Navigator.pop(ctx, 'inventory'),
             ),
+            const SizedBox(height: 8),
           ],
         ),
       ),
@@ -95,16 +122,18 @@ class _ReportsScreenState extends State<ReportsScreen> {
         final assetsByRes = <String, List<ReservationAsset>>{};
         final conditionsByRes = <String, Map<String, String>>{};
 
-        final relevant = data.reservations.where((r) =>
-            r.status == 'approved' ||
-            r.status == 'borrowed' ||
-            r.status == 'completed');
+        final relevant = data.reservations.where(
+          (r) =>
+              r.status == 'approved' ||
+              r.status == 'borrowed' ||
+              r.status == 'completed',
+        );
 
         for (final r in relevant) {
-          final links =
-              await _reservationService.fetchReservationAssets(r.id);
-          final conditions =
-              await _reservationService.fetchReturnConditions(r.id);
+          final links = await _reservationService.fetchReservationAssets(r.id);
+          final conditions = await _reservationService.fetchReturnConditions(
+            r.id,
+          );
           assetsByRes[r.id] = links;
           conditionsByRes[r.id] = conditions;
         }
@@ -118,9 +147,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Export failed: $e')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Export failed: $e')));
     }
   }
 
@@ -128,15 +156,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
     try {
       await downloadCsv(filename, csv);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Downloading $filename')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Downloading $filename')));
     } on UnsupportedError {
       await Clipboard.setData(ClipboardData(text: csv));
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('CSV copied to clipboard.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('CSV copied to clipboard.')));
     }
   }
 
@@ -159,16 +186,31 @@ class _ReportsScreenState extends State<ReportsScreen> {
       appBar: BorrowLogAppBar(
         title: 'Reports',
         actions: [
-          FutureBuilder<_ReportData>(
-            future: _future,
-            builder: (context, snap) {
-              final hasData = snap.hasData;
-              return IconButton(
-                tooltip: 'Export CSV',
-                icon: const Icon(Icons.download),
-                onPressed: hasData ? () => _exportCsv(snap.data!) : null,
-              );
+          PopupMenuButton<String>(
+            tooltip: 'Export data',
+            icon: const Icon(Icons.file_download_outlined),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+            onSelected: (value) {
+              if (value == 'csv') {
+                _future.then((data) {
+                  if (mounted) _exportCsv(data);
+                });
+              }
             },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: 'csv',
+                child: Row(
+                  children: [
+                    Icon(Icons.table_chart_outlined, size: 20),
+                    SizedBox(width: 12),
+                    Text('Export CSV'),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -190,15 +232,26 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
+  String get _rangeLabel {
+    switch (_range) {
+      case 'week':
+        return 'This week';
+      case 'all':
+        return 'All time';
+      default:
+        return 'This month';
+    }
+  }
+
   Widget _body(_ReportData data) {
     final now = DateTime.now();
-    final startOfMonth = DateTime(now.year, now.month, 1);
-
-    final all = data.reservations;
-    final thisMonth = all
-        .where((r) =>
-            r.createdAt != null && r.createdAt!.isAfter(startOfMonth))
-        .toList();
+    final all = _reservationsForRange(data.reservations, now);
+    final thisMonth = data.reservations.where((r) {
+      final created = r.createdAt;
+      return created != null &&
+          created.year == now.year &&
+          created.month == now.month;
+    }).toList();
 
     final pending = all.where((r) => r.status == 'pending').length;
     final active = all.where((r) => r.isActive).length;
@@ -246,68 +299,277 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
     return RefreshIndicator(
       onRefresh: _refresh,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _sectionTitle('Overview'),
-          _statGrid([
-            _StatTile('Total reservations', '${all.length}',
-                Icons.list_alt, Colors.blueGrey),
-            _StatTile('This month', '${thisMonth.length}',
-                Icons.calendar_month, AppTheme.maroon),
-            _StatTile('Pending', '$pending',
-                Icons.pending_actions, Colors.orange),
-            _StatTile('Active', '$active',
-                Icons.play_circle_outline, Colors.blue),
-            _StatTile('Overdue', '$overdue',
-                Icons.warning_amber_rounded, Colors.red),
-            _StatTile('Completed', '$completed',
-                Icons.check_circle_outline, Colors.teal),
-            _StatTile('Rejected', '$rejected',
-                Icons.cancel_outlined, Colors.pink),
-          ]),
-
-          const SizedBox(height: 24),
-          _sectionTitle('Inventory Status'),
-          _inventoryPieChart(
-            available: availableAssets,
-            reserved: reservedAssets,
-            borrowed: borrowedAssets,
-            damaged: damagedAssets,
-            lost: lostAssets,
-          ),
-
-          const SizedBox(height: 24),
-          _sectionTitle('Reservations per Month'),
-          _monthlyBarChart(monthlyCounts),
-
-          const SizedBox(height: 24),
-          _sectionTitle('Most-Borrowed Equipment'),
-          if (top5.isEmpty)
-            const Card(
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: Text('No borrowing data yet.',
-                    style: TextStyle(color: Colors.black54)),
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760),
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+            children: [
+              SizedBox(
+                width: double.infinity,
+                child: SegmentedButton<String>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment(value: 'week', label: Text('Week')),
+                    ButtonSegment(value: 'month', label: Text('Month')),
+                    ButtonSegment(value: 'all', label: Text('All time')),
+                  ],
+                  selected: {_range},
+                  onSelectionChanged: (selection) =>
+                      setState(() => _range = selection.first),
+                ),
               ),
-            )
-          else
-            _topTypesChart(top5),
+              const SizedBox(height: 20),
+              _sectionTitle('Overview', subtitle: _rangeLabel),
+              Row(
+                children: [
+                  Expanded(
+                    child: _HeroTile(
+                      label: 'Reservations',
+                      caption: _rangeLabel,
+                      value: '${all.length}',
+                      icon: Icons.list_alt_rounded,
+                      filled: true,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _HeroTile(
+                      label: 'Created',
+                      caption: 'This month',
+                      value: '${thisMonth.length}',
+                      icon: Icons.calendar_month_rounded,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _statusBreakdown(
+                total: all.length,
+                rows: [
+                  _StatusRow('Pending', pending, Icons.pending_actions,
+                      Colors.orange.shade800),
+                  _StatusRow('Active', active, Icons.play_circle_outline,
+                      Colors.blue.shade700),
+                  _StatusRow('Overdue', overdue, Icons.warning_amber_rounded,
+                      Colors.red.shade700),
+                  _StatusRow('Completed', completed,
+                      Icons.check_circle_outline, Colors.teal.shade700),
+                  _StatusRow('Rejected', rejected, Icons.cancel_outlined,
+                      Colors.pink.shade700),
+                ],
+              ),
+              const SizedBox(height: 28),
+              _sectionTitle('Inventory status'),
+              _inventoryPieChart(
+                available: availableAssets,
+                reserved: reservedAssets,
+                borrowed: borrowedAssets,
+                damaged: damagedAssets,
+                lost: lostAssets,
+              ),
+              const SizedBox(height: 28),
+              _sectionTitle('Reservations per month',
+                  subtitle: 'Last 6 months'),
+              _monthlyBarChart(monthlyCounts),
+              const SizedBox(height: 28),
+              _sectionTitle('Most-borrowed equipment', subtitle: _rangeLabel),
+              if (top5.isEmpty)
+                _emptyCard(Icons.bar_chart_rounded, 'No borrowing data yet.')
+              else
+                _topTypesChart(top5),
+              const SizedBox(height: 28),
+              _sectionTitle('Damage rate'),
+              _damageRateCard(all, damagedAssets + lostAssets),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-          const SizedBox(height: 24),
-          _sectionTitle('Damage Rate'),
-          _damageRateCard(all, damagedAssets + lostAssets),
+  List<Reservation> _reservationsForRange(
+    List<Reservation> reservations,
+    DateTime now,
+  ) {
+    if (_range == 'all') return reservations;
+    final start = _range == 'week'
+        ? now.subtract(Duration(days: now.weekday - 1))
+        : DateTime(now.year, now.month, 1);
+    return reservations.where((reservation) {
+      final created = reservation.createdAt;
+      return created != null && !created.isBefore(start);
+    }).toList();
+  }
+
+  String _monthKey(DateTime d) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${months[d.month - 1]} ${d.year.toString().substring(2)}';
+  }
+
+  // ---------------------------------------------------------
+  // SHARED UI PIECES
+  // ---------------------------------------------------------
+
+  Widget _card({required Widget child, EdgeInsets? padding}) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: padding ?? const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: child,
+    );
+  }
+
+  Widget _emptyCard(IconData icon, String message) {
+    final scheme = Theme.of(context).colorScheme;
+    return _card(
+      padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
+      child: Column(
+        children: [
+          Icon(icon, size: 36, color: scheme.outline),
+          const SizedBox(height: 8),
+          Text(
+            message,
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium
+                ?.copyWith(color: scheme.onSurfaceVariant),
+          ),
         ],
       ),
     );
   }
 
-  String _monthKey(DateTime d) {
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
-    return '${months[d.month - 1]} ${d.year.toString().substring(2)}';
+  Widget _sectionTitle(String text, {String? subtitle}) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10, top: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        textBaseline: TextBaseline.alphabetic,
+        children: [
+          Text(
+            text.toUpperCase(),
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: AppTheme.maroon,
+              letterSpacing: 1.2,
+            ),
+          ),
+          if (subtitle != null) ...[
+            const SizedBox(width: 8),
+            Text(
+              '· $subtitle',
+              style: TextStyle(
+                fontSize: 12,
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Replaces the tall 2-column grid with one compact, scannable card.
+  Widget _statusBreakdown({
+    required int total,
+    required List<_StatusRow> rows,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    return _card(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+      child: Column(
+        children: [
+          for (var i = 0; i < rows.length; i++) ...[
+            _statusRowTile(rows[i], total, scheme),
+            if (i != rows.length - 1)
+              Divider(height: 1, color: scheme.outlineVariant),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _statusRowTile(_StatusRow row, int total, ColorScheme scheme) {
+    final ratio = total == 0 ? 0.0 : row.value / total;
+    final highlight = row.label == 'Overdue' && row.value > 0;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Semantics(
+        label: '${row.label}: ${row.value}',
+        child: Row(
+          children: [
+            _IconTile(icon: row.icon, color: row.color, size: 34),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    row.label,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(99),
+                    child: LinearProgressIndicator(
+                      value: ratio,
+                      minHeight: 5,
+                      backgroundColor: scheme.surfaceContainerHighest,
+                      color: row.color,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 14),
+            Container(
+              constraints: const BoxConstraints(minWidth: 40),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: highlight
+                    ? row.color
+                    : row.color.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(99),
+              ),
+              child: Text(
+                '${row.value}',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 15,
+                  color: highlight ? Colors.white : row.color,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   // ---------------------------------------------------------
@@ -324,202 +586,244 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final total = available + reserved + borrowed + damaged + lost;
 
     if (total == 0) {
-      return const Card(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Center(
-            child: Text('No inventory data yet.',
-                style: TextStyle(color: Colors.black54)),
-          ),
-        ),
-      );
+      return _emptyCard(Icons.inventory_2_outlined, 'No inventory data yet.');
     }
 
     final segments = <_PieSegment>[
       if (available > 0)
-        _PieSegment('Available', available, Colors.green),
+        _PieSegment('Available', available, AppTheme.statusApproved),
       if (reserved > 0)
-        _PieSegment('Reserved', reserved, Colors.orange),
+        _PieSegment('Reserved', reserved, AppTheme.statusPending),
       if (borrowed > 0)
-        _PieSegment('Borrowed', borrowed, Colors.blue),
+        _PieSegment('Borrowed', borrowed, AppTheme.statusBorrowed),
       if (damaged > 0)
-        _PieSegment('Damaged/Maint.', damaged, Colors.purple),
-      if (lost > 0) _PieSegment('Lost', lost, Colors.red),
+        _PieSegment('Damaged/Maint.', damaged, AppTheme.statusOverdue),
+      if (lost > 0) _PieSegment('Lost', lost, AppTheme.statusRejected),
     ];
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: SizedBox(
-          height: 220,
-          child: Row(
-            children: [
-              Expanded(
-                flex: 3,
-                child: PieChart(
+    final scheme = Theme.of(context).colorScheme;
+    final touched = (_touchedPie >= 0 && _touchedPie < segments.length)
+        ? segments[_touchedPie]
+        : null;
+
+    return _card(
+      child: Column(
+        children: [
+          SizedBox(
+            height: 210,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                PieChart(
                   PieChartData(
-                    sectionsSpace: 2,
-                    centerSpaceRadius: 40,
-                    sections: segments.map((s) {
-                      final pct = (s.value / total) * 100;
-                      return PieChartSectionData(
-                        value: s.value.toDouble(),
-                        color: s.color,
-                        title: pct >= 8
-                            ? '${pct.toStringAsFixed(0)}%'
-                            : '',
-                        radius: 55,
-                        titleStyle: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                    sectionsSpace: 3,
+                    centerSpaceRadius: 58,
+                    pieTouchData: PieTouchData(
+                      touchCallback: (event, response) {
+                        final idx =
+                            response?.touchedSection?.touchedSectionIndex ??
+                                -1;
+                        final next =
+                            event.isInterestedForInteractions ? idx : -1;
+                        if (next != _touchedPie) {
+                          setState(() => _touchedPie = next);
+                        }
+                      },
+                    ),
+                    sections: [
+                      for (var i = 0; i < segments.length; i++)
+                        PieChartSectionData(
+                          value: segments[i].value.toDouble(),
+                          color: segments[i].color,
+                          title: (segments[i].value / total) * 100 >= 8 &&
+                                  i != _touchedPie
+                              ? '${((segments[i].value / total) * 100).toStringAsFixed(0)}%'
+                              : '',
+                          radius: i == _touchedPie ? 36 : 30,
+                          titleStyle: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
                         ),
-                      );
-                    }).toList(),
+                    ],
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: segments.map((s) {
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 3),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 12,
-                            height: 12,
-                            decoration: BoxDecoration(
-                              color: s.color,
-                              borderRadius: BorderRadius.circular(3),
-                            ),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${touched?.value ?? total}',
+                      style: Theme.of(context).textTheme.headlineMedium
+                          ?.copyWith(fontWeight: FontWeight.w800),
+                    ),
+                    Text(
+                      touched?.label ?? 'assets',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              s.label,
-                              style: const TextStyle(fontSize: 12),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          Text(
-                            '${s.value}',
-                            style:
-                                const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
+                    ),
+                  ],
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
+          const SizedBox(height: 12),
+          for (final s in segments)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 5),
+              child: Row(
+                children: [
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: s.color,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      s.label,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
+                  Text(
+                    '${s.value}',
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(fontWeight: FontWeight.w800),
+                  ),
+                  SizedBox(
+                    width: 52,
+                    child: Text(
+                      '${(s.value / total * 100).round()}%',
+                      textAlign: TextAlign.right,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }
 
   Widget _monthlyBarChart(Map<String, int> monthlyCounts) {
+    final scheme = Theme.of(context).colorScheme;
     final entries = monthlyCounts.entries.toList();
     final maxY = entries.isEmpty
         ? 1.0
         : (entries.map((e) => e.value).reduce((a, b) => a > b ? a : b) + 1)
             .toDouble();
+    final hasData = entries.any((e) => e.value > 0);
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(8, 16, 16, 8),
-        child: SizedBox(
-          height: 220,
-          child: BarChart(
-            BarChartData(
-              alignment: BarChartAlignment.spaceAround,
-              maxY: maxY,
-              barTouchData: BarTouchData(
-                touchTooltipData: BarTouchTooltipData(
-                  getTooltipItem: (group, _, rod, _) {
-                    return BarTooltipItem(
-                      '${entries[group.x].key}\n${rod.toY.toInt()} reservations',
-                      const TextStyle(color: Colors.white, fontSize: 12),
+    if (!hasData) {
+      return _emptyCard(
+        Icons.bar_chart_rounded,
+        'No reservations in this period.',
+      );
+    }
+
+    return _card(
+      padding: const EdgeInsets.fromLTRB(8, 20, 16, 8),
+      child: SizedBox(
+        height: 220,
+        child: BarChart(
+          BarChartData(
+            alignment: BarChartAlignment.spaceAround,
+            maxY: maxY,
+            barTouchData: BarTouchData(
+              touchTooltipData: BarTouchTooltipData(
+                getTooltipItem: (group, _, rod, _) {
+                  return BarTooltipItem(
+                    '${entries[group.x].key}\n${rod.toY.toInt()} reservations',
+                    const TextStyle(color: Colors.white, fontSize: 12),
+                  );
+                },
+              ),
+            ),
+            titlesData: FlTitlesData(
+              topTitles: const AxisTitles(
+                sideTitles: SideTitles(showTitles: false),
+              ),
+              rightTitles: const AxisTitles(
+                sideTitles: SideTitles(showTitles: false),
+              ),
+              leftTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: 30,
+                  interval: 1,
+                  getTitlesWidget: (value, meta) {
+                    if (value == value.roundToDouble()) {
+                      return Text(
+                        value.toInt().toString(),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      );
+                    }
+                    return const SizedBox.shrink();
+                  },
+                ),
+              ),
+              bottomTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: 30,
+                  getTitlesWidget: (value, meta) {
+                    final i = value.toInt();
+                    if (i < 0 || i >= entries.length) {
+                      return const SizedBox.shrink();
+                    }
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        entries[i].key,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
                     );
                   },
                 ),
               ),
-              titlesData: FlTitlesData(
-                topTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false)),
-                rightTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false)),
-                leftTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 30,
-                    interval: 1,
-                    getTitlesWidget: (value, meta) {
-                      if (value == value.roundToDouble()) {
-                        return Text(
-                          value.toInt().toString(),
-                          style: const TextStyle(
-                              fontSize: 11, color: Colors.black54),
-                        );
-                      }
-                      return const SizedBox.shrink();
-                    },
-                  ),
-                ),
-                bottomTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 30,
-                    getTitlesWidget: (value, meta) {
-                      final i = value.toInt();
-                      if (i < 0 || i >= entries.length) {
-                        return const SizedBox.shrink();
-                      }
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text(
-                          entries[i].key,
-                          style: const TextStyle(
-                              fontSize: 10, color: Colors.black54),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-              gridData: FlGridData(
-                show: true,
-                drawVerticalLine: false,
-                horizontalInterval: 1,
-                getDrawingHorizontalLine: (v) => FlLine(
-                  color: Colors.black12,
-                  strokeWidth: 0.5,
-                ),
-              ),
-              borderData: FlBorderData(show: false),
-              barGroups: List.generate(entries.length, (i) {
-                return BarChartGroupData(
-                  x: i,
-                  barRods: [
-                    BarChartRodData(
-                      toY: entries[i].value.toDouble(),
-                      color: AppTheme.maroon,
-                      width: 20,
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(4),
-                        topRight: Radius.circular(4),
-                      ),
-                    ),
-                  ],
-                );
-              }),
             ),
+            gridData: FlGridData(
+              show: true,
+              drawVerticalLine: false,
+              horizontalInterval: 1,
+              getDrawingHorizontalLine: (v) =>
+                  FlLine(color: scheme.outlineVariant, strokeWidth: 0.6),
+            ),
+            borderData: FlBorderData(show: false),
+            barGroups: List.generate(entries.length, (i) {
+              final isLatest = i == entries.length - 1;
+              return BarChartGroupData(
+                x: i,
+                barRods: [
+                  BarChartRodData(
+                    toY: entries[i].value.toDouble(),
+                    color: isLatest
+                        ? AppTheme.maroon
+                        : AppTheme.maroon.withValues(alpha: 0.55),
+                    width: 22,
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(6),
+                      topRight: Radius.circular(6),
+                    ),
+                  ),
+                ],
+              );
+            }),
           ),
         ),
       ),
@@ -527,59 +831,83 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   Widget _topTypesChart(List<MapEntry<String, int>> top) {
+    final scheme = Theme.of(context).colorScheme;
     final maxVal = top.first.value.toDouble();
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          children: top.map((e) {
-            final ratio = maxVal == 0 ? 0.0 : e.value / maxVal;
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
+    return _card(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Column(
+        children: [
+          for (var i = 0; i < top.length; i++)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
               child: Row(
                 children: [
-                  SizedBox(
-                    width: 130,
-                    child: Text(
-                      e.key,
-                      style:
-                          const TextStyle(fontWeight: FontWeight.w600),
-                      overflow: TextOverflow.ellipsis,
+                  Container(
+                    width: 26,
+                    height: 26,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: i == 0
+                          ? AppTheme.maroon
+                          : AppTheme.maroon.withValues(alpha: 0.10),
+                      shape: BoxShape.circle,
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
-                      child: LinearProgressIndicator(
-                        value: ratio.toDouble(),
-                        minHeight: 12,
-                        backgroundColor: Colors.grey.shade200,
-                        valueColor: const AlwaysStoppedAnimation(
-                            AppTheme.maroon),
+                    child: Text(
+                      '${i + 1}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: i == 0 ? Colors.white : AppTheme.maroon,
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    width: 32,
-                    child: Text(
-                      '${e.value}',
-                      textAlign: TextAlign.right,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          top[i].key,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 6),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(99),
+                          child: LinearProgressIndicator(
+                            value: maxVal == 0 ? 0.0 : top[i].value / maxVal,
+                            minHeight: 6,
+                            backgroundColor: scheme.surfaceContainerHighest,
+                            valueColor: const AlwaysStoppedAnimation(
+                              AppTheme.maroon,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    '${top[i].value}',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w800),
                   ),
                 ],
               ),
-            );
-          }).toList(),
-        ),
+            ),
+        ],
       ),
     );
   }
 
   Widget _damageRateCard(List<Reservation> all, int damagedCount) {
+    final scheme = Theme.of(context).colorScheme;
     final completed = all.where((r) => r.status == 'completed').toList();
     int completedUnits = 0;
     for (final r in completed) {
@@ -590,64 +918,167 @@ class _ReportsScreenState extends State<ReportsScreen> {
         ? 0.0
         : damagedCount / (completedUnits + damagedCount);
 
-    return Card(
-      child: Padding(
+    final Color tone = rate >= 0.15
+        ? Colors.red.shade700
+        : (rate >= 0.05 ? Colors.orange.shade800 : Colors.green.shade700);
+
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '${(rate * 100).toStringAsFixed(1)}%',
+                style: TextStyle(
+                  fontSize: 34,
+                  height: 1,
+                  fontWeight: FontWeight.w800,
+                  color: tone,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 3),
+                child: Text(
+                  rate >= 0.15
+                      ? 'High'
+                      : (rate >= 0.05 ? 'Moderate' : 'Low'),
+                  style: TextStyle(
+                    color: tone,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: LinearProgressIndicator(
+              value: rate.clamp(0.0, 1.0),
+              minHeight: 8,
+              backgroundColor: scheme.surfaceContainerHighest,
+              color: tone,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            '$damagedCount damaged or lost out of '
+            '$completedUnits completed units.',
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Small UI helpers
+// ---------------------------------------------------------------------------
+
+class _IconTile extends StatelessWidget {
+  const _IconTile({required this.icon, required this.color, this.size = 40});
+
+  final IconData icon;
+  final Color color;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(size * 0.3),
+      ),
+      child: Icon(icon, color: color, size: size * 0.52),
+    );
+  }
+}
+
+class _HeroTile extends StatelessWidget {
+  const _HeroTile({
+    required this.label,
+    required this.caption,
+    required this.value,
+    required this.icon,
+    this.filled = false,
+  });
+
+  final String label;
+  final String caption;
+  final String value;
+  final IconData icon;
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final fg = filled ? Colors.white : AppTheme.maroon;
+    final sub = filled ? Colors.white70 : scheme.onSurfaceVariant;
+
+    return Semantics(
+      label: '$label, $caption: $value',
+      child: Container(
         padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: filled ? AppTheme.maroon : scheme.surface,
+          borderRadius: BorderRadius.circular(18),
+          border: filled ? null : Border.all(color: scheme.outlineVariant),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Row(
+              children: [
+                Icon(icon, size: 18, color: sub),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: sub,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
             Text(
-              '${(rate * 100).toStringAsFixed(1)}%',
-              style: const TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.maroon,
+              value,
+              style: TextStyle(
+                fontSize: 34,
+                height: 1,
+                fontWeight: FontWeight.w800,
+                color: fg,
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              '$damagedCount damaged or lost out of '
-              '$completedUnits completed units.',
-              style: const TextStyle(color: Colors.black54, fontSize: 13),
-            ),
+            const SizedBox(height: 6),
+            Text(caption, style: TextStyle(fontSize: 12, color: sub)),
           ],
         ),
       ),
     );
   }
+}
 
-  Widget _sectionTitle(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8, top: 4),
-      child: Text(
-        text.toUpperCase(),
-        style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-          color: AppTheme.maroon,
-          letterSpacing: 1,
-        ),
-      ),
-    );
-  }
-
-  Widget _statGrid(List<Widget> tiles) {
-    return LayoutBuilder(
-      builder: (_, constraints) {
-        final width = constraints.maxWidth;
-        final cols = width < 400 ? 2 : (width < 700 ? 3 : 4);
-        return GridView.count(
-          crossAxisCount: cols,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 8,
-          crossAxisSpacing: 8,
-          childAspectRatio: 1.6,
-          children: tiles,
-        );
-      },
-    );
-  }
+class _StatusRow {
+  final String label;
+  final int value;
+  final IconData icon;
+  final Color color;
+  _StatusRow(this.label, this.value, this.icon, this.color);
 }
 
 class _PieSegment {
@@ -655,53 +1086,6 @@ class _PieSegment {
   final int value;
   final Color color;
   _PieSegment(this.label, this.value, this.color);
-}
-
-class _StatTile extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color color;
-
-  const _StatTile(this.label, this.value, this.icon, this.color);
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(10),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, size: 18, color: color),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: const TextStyle(
-                        fontSize: 12, color: Colors.black54),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _ReportData {
