@@ -73,7 +73,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         actions: [
           IconButton(
             tooltip: 'Mark all as read',
-            icon: const Icon(Icons.done_all),
+            icon: const Icon(Icons.mark_email_read),
             onPressed: _markAllRead,
           ),
         ],
