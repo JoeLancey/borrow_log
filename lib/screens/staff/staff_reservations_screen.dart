@@ -368,7 +368,7 @@ class _StaffReservationsScreenState extends State<StaffReservationsScreen>
                     _infoRow(
                       Icons.event_outlined,
                       '${r.useDateFormatted}'
-                      '${r.useTime != null ? ' · ${r.useTime}' : ''}',
+                      '${r.useTime != null ? ' Â· ${r.useTime}' : ''}',
                     ),
                     if (r.dueDateFormatted != null)
                       _infoRow(
@@ -376,7 +376,7 @@ class _StaffReservationsScreenState extends State<StaffReservationsScreen>
                             ? Icons.warning_amber_rounded
                             : Icons.schedule,
                         'Due: ${r.dueDateFormatted}'
-                        '${r.isOverdue ? ' · Overdue' : ''}',
+                        '${r.isOverdue ? ' Â· Overdue' : ''}',
                         color: r.isOverdue ? _red : null,
                         bold: r.isOverdue,
                       ),
@@ -1066,6 +1066,10 @@ class _ReturnDialogState extends State<_ReturnDialog> {
 
     return AlertDialog(
       title: const Text('Receive return'),
+      // More horizontal room so the segmented button doesn't wrap.
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+      actionsPadding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
       content: SizedBox(
         width: double.maxFinite,
         child: ListView(
@@ -1076,17 +1080,18 @@ class _ReturnDialogState extends State<_ReturnDialog> {
               '${widget.reservation.studentName ?? 'the student'}.',
               style: TextStyle(
                 fontSize: 13,
+                height: 1.4,
                 color: scheme.onSurfaceVariant,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             ...widget.links.map((link) {
               final pn = link.asset?.propertyNumber ?? link.equipmentAssetId;
               final entry = _entries[link.id]!;
               final color = _conditionColor(entry.condition);
               return Container(
-                margin: const EdgeInsets.symmetric(vertical: 5),
-                padding: const EdgeInsets.all(12),
+                margin: const EdgeInsets.symmetric(vertical: 6),
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   color: scheme.surface,
                   borderRadius: BorderRadius.circular(14),
@@ -1115,12 +1120,25 @@ class _ReturnDialogState extends State<_ReturnDialog> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 12),
                     SizedBox(
                       width: double.infinity,
                       child: SegmentedButton<String>(
                         showSelectedIcon: false,
+                        // Fill full width and split equally between segments.
+                        expandedInsets: EdgeInsets.zero,
+                        // Reduce per-segment padding so labels fit on one line.
                         style: ButtonStyle(
+                          padding: const WidgetStatePropertyAll(
+                            EdgeInsets.symmetric(horizontal: 6, vertical: 12),
+                          ),
+                          textStyle: const WidgetStatePropertyAll(
+                            TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           backgroundColor:
                               WidgetStateProperty.resolveWith((states) {
                             return states.contains(WidgetState.selected)
@@ -1149,7 +1167,7 @@ class _ReturnDialogState extends State<_ReturnDialog> {
                       ),
                     ),
                     if (entry.condition != 'good') ...[
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 12),
                       TextField(
                         textCapitalization: TextCapitalization.sentences,
                         decoration: InputDecoration(
@@ -1171,7 +1189,7 @@ class _ReturnDialogState extends State<_ReturnDialog> {
             }),
             if (problems > 0)
               Padding(
-                padding: const EdgeInsets.only(top: 6),
+                padding: const EdgeInsets.only(top: 8, bottom: 4),
                 child: Text(
                   '$problems item${problems == 1 ? '' : 's'} flagged as damaged or lost.',
                   style: const TextStyle(
@@ -1184,18 +1202,36 @@ class _ReturnDialogState extends State<_ReturnDialog> {
           ],
         ),
       ),
+      // Cancel + Confirm side by side, evenly split.
       actions: [
-        OutlinedButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, _entries),
-          style: FilledButton.styleFrom(
-            backgroundColor: AppTheme.maroon,
-            foregroundColor: Colors.white,
-          ),
-          child: const Text('Confirm return'),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => Navigator.pop(context),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, 48),
+                ),
+                child: const Text('Cancel'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton(
+                onPressed: () => Navigator.pop(context, _entries),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppTheme.maroon,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(0, 48),
+                ),
+                child: const Text(
+                  'Confirm return',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );
