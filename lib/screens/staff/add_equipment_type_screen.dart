@@ -4,6 +4,7 @@ import '../../models/laboratory.dart';
 import '../../services/inventory_service.dart';
 import '../../services/laboratory_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/app_feedback.dart';
 import '../../widgets/borrow_log_app_bar.dart';
 
 class AddEquipmentTypeScreen extends StatefulWidget {
@@ -56,8 +57,10 @@ class _AddEquipmentTypeScreenState extends State<AddEquipmentTypeScreen> {
       });
     } catch (e) {
       if (!mounted) return;
+      // ignore: avoid_print
+      print('📋 [add-type] load labs failed: $e');
       setState(() {
-        _error = 'Failed to load laboratories: $e';
+        _error = 'Could not load laboratories. Please try again.';
         _loadingLabs = false;
       });
     }
@@ -150,16 +153,20 @@ class _AddEquipmentTypeScreenState extends State<AddEquipmentTypeScreen> {
       }
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Created "${newType.name}" with $_count asset(s).',
-          ),
-        ),
+
+      // ✅ Clear, consistent success toast
+      AppFeedback.success(
+        context,
+        _count > 0
+            ? 'Type "${newType.name}" created · $_count asset${_count == 1 ? '' : 's'} added'
+            : 'Type "${newType.name}" created',
       );
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
+      // Log raw error, show friendly message
+      // ignore: avoid_print
+      print('📋 [add-type] save failed: $e');
       setState(() {
         _saving = false;
         _error = _readableError(e);
@@ -180,7 +187,12 @@ class _AddEquipmentTypeScreenState extends State<AddEquipmentTypeScreen> {
     if (s.contains('violates row-level security')) {
       return 'Permission denied. Only staff can add equipment.';
     }
-    return 'Failed to save: $s';
+    if (s.contains('network') ||
+        s.contains('SocketException') ||
+        s.contains('Failed host lookup')) {
+      return 'Network error. Please check your connection and try again.';
+    }
+    return 'Could not create equipment type. Please try again.';
   }
 
   // ---------------------------------------------------------

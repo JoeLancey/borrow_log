@@ -320,7 +320,11 @@ class ReservationService implements ReservationRepository {
       throw StateError('Only pending reservations can be approved.');
     }
 
-    // Notify + email (best-effort)
+    // ---------------------------------------------
+    // Notify + email (best-effort, with diagnostics)
+    // ---------------------------------------------
+    // ignore: avoid_print
+    print('📧 [approveReservation] Entering notify block');
     try {
       final row = await _client
           .from('reservations')
@@ -329,41 +333,59 @@ class ReservationService implements ReservationRepository {
           .eq('id', reservationId)
           .maybeSingle();
 
-      if (row != null) {
-        final studentId = row['student_id'] as String;
-        final typeName =
-            (row['equipment_types'] as Map?)?['name']?.toString() ??
-                'laboratory equipment';
-        final email = (row['profiles'] as Map?)?['email']?.toString();
-        final name =
-            (row['profiles'] as Map?)?['full_name']?.toString() ?? 'Student';
-
-        await NotificationService().insertNotification(
-          userId: studentId,
-          title: 'Reservation approved',
-          body:
-              'Your reservation for $typeName has been approved. Please wait for the equipment to be released.',
-          kind: 'reservation_approved',
-          reservationId: reservationId,
-        );
-
-        if (email != null) {
-          final emailSvc = EmailService();
-          await emailSvc.sendEmail(
-            to: email,
-            subject: 'BORROW LOG: Reservation approved',
-            html: emailSvc.wrapHtml(
-              title: 'Reservation approved',
-              bodyHtml: '''
-                <p>Hi $name,</p>
-                <p>Your reservation for <strong>$typeName</strong> has been approved.</p>
-                <p>Please wait for the laboratory staff to release the equipment to you.</p>
-              ''',
-            ),
-          );
-        }
+      if (row == null) {
+        // ignore: avoid_print
+        print('📧 [approveReservation] ⚠️ row is null');
+        return;
       }
-    } catch (_) {}
+
+      final studentId = row['student_id'] as String;
+      final typeName =
+          (row['equipment_types'] as Map?)?['name']?.toString() ??
+              'laboratory equipment';
+      final email = (row['profiles'] as Map?)?['email']?.toString();
+      final name =
+          (row['profiles'] as Map?)?['full_name']?.toString() ?? 'Student';
+
+      // ignore: avoid_print
+      print('📧 [approveReservation] Student: $name <$email>');
+
+      await NotificationService().insertNotification(
+        userId: studentId,
+        title: 'Reservation approved',
+        body:
+            'Your reservation for $typeName has been approved. Please wait for the equipment to be released.',
+        kind: 'reservation_approved',
+        reservationId: reservationId,
+      );
+
+      if (email == null) {
+        // ignore: avoid_print
+        print('📧 [approveReservation] ⚠️ Email is null — skipping send');
+        return;
+      }
+
+      final emailSvc = EmailService();
+      await emailSvc.sendEmail(
+        to: email,
+        subject: 'BORROW LOG: Reservation approved',
+        html: emailSvc.wrapHtml(
+          title: 'Reservation approved',
+          bodyHtml: '''
+            <p>Hi $name,</p>
+            <p>Your reservation for <strong>$typeName</strong> has been approved.</p>
+            <p>Please wait for the laboratory staff to release the equipment to you.</p>
+          ''',
+        ),
+      );
+      // ignore: avoid_print
+      print('📧 [approveReservation] ✅ sendEmail returned');
+    } catch (e, stack) {
+      // ignore: avoid_print
+      print('📧 [approveReservation] ❌ FAILED: $e');
+      // ignore: avoid_print
+      print('📧 [approveReservation] STACK: $stack');
+    }
   }
 
   @override
@@ -389,6 +411,8 @@ class ReservationService implements ReservationRepository {
       throw StateError('Only pending reservations can be rejected.');
     }
 
+    // ignore: avoid_print
+    print('📧 [rejectReservation] Entering notify block');
     try {
       final row = await _client
           .from('reservations')
@@ -405,6 +429,9 @@ class ReservationService implements ReservationRepository {
         final email = (row['profiles'] as Map?)?['email']?.toString();
         final name =
             (row['profiles'] as Map?)?['full_name']?.toString() ?? 'Student';
+
+        // ignore: avoid_print
+        print('📧 [rejectReservation] Student: $name <$email>');
 
         await NotificationService().insertNotification(
           userId: studentId,
@@ -428,9 +455,19 @@ class ReservationService implements ReservationRepository {
               ''',
             ),
           );
+          // ignore: avoid_print
+          print('📧 [rejectReservation] ✅ sendEmail returned');
+        } else {
+          // ignore: avoid_print
+          print('📧 [rejectReservation] ⚠️ Email is null');
         }
       }
-    } catch (_) {}
+    } catch (e, stack) {
+      // ignore: avoid_print
+      print('📧 [rejectReservation] ❌ FAILED: $e');
+      // ignore: avoid_print
+      print('📧 [rejectReservation] STACK: $stack');
+    }
   }
 
   @override
@@ -463,6 +500,8 @@ class ReservationService implements ReservationRepository {
       throw StateError('Only approved reservations can be released.');
     }
 
+    // ignore: avoid_print
+    print('📧 [releaseReservation] Entering notify block');
     try {
       final row = await _client
           .from('reservations')
@@ -481,6 +520,9 @@ class ReservationService implements ReservationRepository {
             (row['profiles'] as Map?)?['full_name']?.toString() ?? 'Student';
 
         final due = dueDate.toIso8601String().split('T').first;
+
+        // ignore: avoid_print
+        print('📧 [releaseReservation] Student: $name <$email>');
 
         await NotificationService().insertNotification(
           userId: studentId,
@@ -506,9 +548,19 @@ class ReservationService implements ReservationRepository {
               ''',
             ),
           );
+          // ignore: avoid_print
+          print('📧 [releaseReservation] ✅ sendEmail returned');
+        } else {
+          // ignore: avoid_print
+          print('📧 [releaseReservation] ⚠️ Email is null');
         }
       }
-    } catch (_) {}
+    } catch (e, stack) {
+      // ignore: avoid_print
+      print('📧 [releaseReservation] ❌ FAILED: $e');
+      // ignore: avoid_print
+      print('📧 [releaseReservation] STACK: $stack');
+    }
   }
 
   @override
@@ -553,6 +605,8 @@ class ReservationService implements ReservationRepository {
       throw StateError('Only borrowed reservations can be completed.');
     }
 
+    // ignore: avoid_print
+    print('📧 [completeReservation] Entering notify block');
     try {
       final row = await _client
           .from('reservations')
@@ -569,6 +623,9 @@ class ReservationService implements ReservationRepository {
         final email = (row['profiles'] as Map?)?['email']?.toString();
         final name =
             (row['profiles'] as Map?)?['full_name']?.toString() ?? 'Student';
+
+        // ignore: avoid_print
+        print('📧 [completeReservation] Student: $name <$email>');
 
         await NotificationService().insertNotification(
           userId: studentId,
@@ -592,8 +649,18 @@ class ReservationService implements ReservationRepository {
               ''',
             ),
           );
+          // ignore: avoid_print
+          print('📧 [completeReservation] ✅ sendEmail returned');
+        } else {
+          // ignore: avoid_print
+          print('📧 [completeReservation] ⚠️ Email is null');
         }
       }
-    } catch (_) {}
+    } catch (e, stack) {
+      // ignore: avoid_print
+      print('📧 [completeReservation] ❌ FAILED: $e');
+      // ignore: avoid_print
+      print('📧 [completeReservation] STACK: $stack');
+    }
   }
 }

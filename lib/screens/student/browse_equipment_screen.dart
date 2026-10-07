@@ -175,7 +175,9 @@ class _BrowseEquipmentScreenState extends State<BrowseEquipmentScreen> {
     );
   }
 
-  // ───────────────────────── Header ─────────────────────────
+  // ---------------------------------------------------------
+  // Header
+  // ---------------------------------------------------------
 
   Widget _header(List<String> categories) {
     return Material(
@@ -200,7 +202,8 @@ class _BrowseEquipmentScreenState extends State<BrowseEquipmentScreen> {
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   itemCount: categories.length + 1,
-                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  // ✅ FIXED: (_, _) instead of (_, __)
+                  separatorBuilder: (_, _) => const SizedBox(width: 8),
                   itemBuilder: (_, i) {
                     final category = i == 0 ? null : categories[i - 1];
                     return _categoryChip(category);
@@ -292,7 +295,9 @@ class _BrowseEquipmentScreenState extends State<BrowseEquipmentScreen> {
     );
   }
 
-  // ───────────────────────── Lab card ─────────────────────────
+  // ---------------------------------------------------------
+  // Lab card
+  // ---------------------------------------------------------
 
   Widget _labCard(Laboratory lab, _BrowseData data) {
     final labTypes =
@@ -310,7 +315,6 @@ class _BrowseEquipmentScreenState extends State<BrowseEquipmentScreen> {
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          // Re-create when filtering starts/stops so matches open automatically.
           key: ValueKey('${lab.id}-$_isFiltering'),
           initiallyExpanded: _isFiltering,
           tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
@@ -354,7 +358,9 @@ class _BrowseEquipmentScreenState extends State<BrowseEquipmentScreen> {
     );
   }
 
-  // ───────────────────────── Equipment type tile ─────────────────────────
+  // ---------------------------------------------------------
+  // Equipment type tile
+  // ---------------------------------------------------------
 
   Widget _typeTile(Laboratory lab, EquipmentType type, _BrowseData data) {
     final assets =

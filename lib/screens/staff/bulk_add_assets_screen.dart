@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../models/equipment_type.dart';
 import '../../services/inventory_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/app_feedback.dart';
 import '../../widgets/borrow_log_app_bar.dart';
 
 class BulkAddAssetsScreen extends StatefulWidget {
@@ -105,10 +106,20 @@ class _BulkAddAssetsScreenState extends State<BulkAddAssetsScreen> {
     if (!mounted) return;
     setState(() => _saving = false);
 
+    // Log raw errors for debugging
+    if (failed.isNotEmpty) {
+      // ignore: avoid_print
+      print('📋 [bulk-add] ${failed.length} failed: $failed');
+    }
+
     await _showSummary(created, failed);
     if (!mounted) return;
 
     if (failed.isEmpty) {
+      AppFeedback.success(
+        context,
+        '${created.length} asset${created.length == 1 ? '' : 's'} created',
+      );
       Navigator.of(context).pop(true);
     } else {
       // Leave the screen open so they can fix the failures and re-submit.

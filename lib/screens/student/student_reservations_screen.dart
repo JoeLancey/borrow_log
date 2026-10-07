@@ -4,6 +4,8 @@ import '../../models/reservation.dart';
 import '../../services/reservation_service.dart';
 import '../../features/reservations/domain/reservation_repository.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/app_feedback.dart';
+import '../../widgets/borrow_log_app_bar.dart';
 import '../../widgets/borrow_log_states.dart';
 import 'new_reservation_screen.dart';
 
@@ -44,11 +46,14 @@ class _StudentReservationsScreenState
   }
 
   Future<void> _newReservation() async {
-    final created = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const NewReservationScreen()),
-    );
-    if (created == true && mounted) await _refresh();
+  final created = await Navigator.of(context).push<bool>(
+    MaterialPageRoute(builder: (_) => const NewReservationScreen()),
+  );
+  if (created == true && mounted) {
+    // Toast is shown by NewReservationScreen before pop.
+    await _refresh();
   }
+}
 
   Future<void> _cancel(Reservation r) async {
     final confirm = await showDialog<bool>(
@@ -77,14 +82,15 @@ class _StudentReservationsScreenState
     try {
       await _service.cancelReservation(r.id);
       if (!mounted) return;
+      AppFeedback.success(context, 'Reservation cancelled.');
       await _refresh();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          behavior: SnackBarBehavior.floating,
-          content: Text('Cancel failed: $e'),
-        ),
+      // ignore: avoid_print
+      print('📋 [cancel] failed: $e');
+      AppFeedback.error(
+        context,
+        'Could not cancel. Only pending requests can be cancelled.',
       );
     }
   }
@@ -93,8 +99,8 @@ class _StudentReservationsScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF6F5F4),
-      appBar: AppBar(
-        title: const Text('My Reservations'),
+      appBar: BorrowLogAppBar(
+        title: 'My Reservations',
         actions: [
           PopupMenuButton<bool>(
             tooltip: 'Sort reservations',
@@ -203,7 +209,9 @@ class _StudentReservationsScreenState
     return all.where((r) => r.status == key).length;
   }
 
-  // ───────────────────────── Filter bar ─────────────────────────
+  // ---------------------------------------------------------
+  // Filter bar
+  // ---------------------------------------------------------
 
   Widget _filterBar(List<Reservation> all) {
     return Material(
@@ -216,7 +224,8 @@ class _StudentReservationsScreenState
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           itemCount: _filters.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          // ✅ FIXED: was (_, __), now (_, _)
+          separatorBuilder: (_, _) => const SizedBox(width: 8),
           itemBuilder: (_, i) {
             final filter = _filters[i];
             final selected = _statusFilter == filter.$1;
@@ -243,7 +252,9 @@ class _StudentReservationsScreenState
     );
   }
 
-  // ───────────────────────── Empty states ─────────────────────────
+  // ---------------------------------------------------------
+  // Empty states
+  // ---------------------------------------------------------
 
   Widget _noMatches() {
     return Padding(
@@ -314,7 +325,9 @@ class _StudentReservationsScreenState
     );
   }
 
-  // ───────────────────────── Card ─────────────────────────
+  // ---------------------------------------------------------
+  // Card
+  // ---------------------------------------------------------
 
   Color _accentFor(Reservation r) {
     if (r.isOverdue) return Colors.red;

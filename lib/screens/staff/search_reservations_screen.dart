@@ -163,7 +163,9 @@ class _SearchReservationsScreenState extends State<SearchReservationsScreen> {
     );
   }
 
-  // ───────────────────────── Filters ─────────────────────────
+  // ---------------------------------------------------------
+  // Filters
+  // ---------------------------------------------------------
 
   Widget _filters() {
     return Material(
@@ -275,7 +277,8 @@ class _SearchReservationsScreenState extends State<SearchReservationsScreen> {
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: _statuses.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            // ✅ FIXED: (_, _) instead of (_, __)
+            separatorBuilder: (_, _) => const SizedBox(width: 8),
             itemBuilder: (_, i) {
               final s = _statuses[i];
               final selected = _statusFilter == s;
@@ -397,7 +400,9 @@ class _SearchReservationsScreenState extends State<SearchReservationsScreen> {
     );
   }
 
-  // ───────────────────────── Results ─────────────────────────
+  // ---------------------------------------------------------
+  // Results
+  // ---------------------------------------------------------
 
   Widget _resultsArea() {
     if (_loading) {
@@ -550,8 +555,9 @@ class _SearchReservationsScreenState extends State<SearchReservationsScreen> {
                         ],
                       ),
                       const SizedBox(height: 10),
+                      // ✅ FIXED: removed pointless string interpolation
                       _infoRow(Icons.person_outline,
-                          '${r.studentName ?? r.studentId}'),
+                          r.studentName ?? r.studentId),
                       _infoRow(Icons.menu_book_outlined, subjectLine),
                       _infoRow(Icons.school_outlined, r.instructor),
                       _infoRow(Icons.event_outlined, useLine),

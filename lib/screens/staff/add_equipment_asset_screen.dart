@@ -5,6 +5,7 @@ import '../../models/laboratory.dart';
 import '../../services/inventory_service.dart';
 import '../../services/laboratory_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/app_feedback.dart';
 import '../../widgets/borrow_log_app_bar.dart';
 
 class AddEquipmentAssetScreen extends StatefulWidget {
@@ -111,8 +112,10 @@ class _AddEquipmentAssetScreenState extends State<AddEquipmentAssetScreen> {
       }
     } catch (e) {
       if (!mounted) return;
+      // ignore: avoid_print
+      print('📋 [add-asset] load labs failed: $e');
       setState(() {
-        _error = 'Failed to load laboratories: $e';
+        _error = 'Could not load laboratories. Please try again.';
         _loadingLabs = false;
       });
     }
@@ -135,8 +138,10 @@ class _AddEquipmentAssetScreenState extends State<AddEquipmentAssetScreen> {
       });
     } catch (e) {
       if (!mounted) return;
+      // ignore: avoid_print
+      print('📋 [add-asset] load types failed: $e');
       setState(() {
-        _error = 'Failed to load equipment: $e';
+        _error = 'Could not load equipment. Please try again.';
         _loadingTypes = false;
       });
     }
@@ -259,12 +264,18 @@ class _AddEquipmentAssetScreenState extends State<AddEquipmentAssetScreen> {
             : _notesController.text.trim(),
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$created asset(s) created.')),
+
+      // ✅ Clear, consistent success toast
+      AppFeedback.success(
+        context,
+        '$created asset${created == 1 ? '' : 's'} created for "${_matchedType!.name}"',
       );
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
+      // Log raw error, show friendly message
+      // ignore: avoid_print
+      print('📋 [add-asset] submit failed: $e');
       setState(() {
         _saving = false;
         _error = _readableError(e);
@@ -281,7 +292,12 @@ class _AddEquipmentAssetScreenState extends State<AddEquipmentAssetScreen> {
     if (s.contains('violates row-level security')) {
       return 'Permission denied. Only staff can add equipment.';
     }
-    return 'Failed to create assets: $s';
+    if (s.contains('network') ||
+        s.contains('SocketException') ||
+        s.contains('Failed host lookup')) {
+      return 'Network error. Please check your connection and try again.';
+    }
+    return 'Could not create assets. Please try again.';
   }
 
   // ---------------------------------------------------------

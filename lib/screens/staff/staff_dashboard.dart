@@ -5,6 +5,7 @@ import '../../services/auth_service.dart';
 import '../../services/reservation_service.dart';
 import '../../features/reservations/domain/reservation_repository.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/app_feedback.dart';
 import '../../widgets/app_components.dart';
 import '../../widgets/borrow_log_app_bar.dart';
 import '../auth/login_screen.dart';
@@ -92,8 +93,12 @@ class _StaffDashboardState extends State<StaffDashboard> {
       confirmLabel: 'Log out',
     );
     if (!confirmed) return;
+    if (!context.mounted) return;
+
     await AuthService().logout();
     if (!context.mounted) return;
+
+    AppFeedback.info(context, 'Signed out');
     Navigator.of(
       context,
     ).pushReplacement(MaterialPageRoute(builder: (_) => const LoginScreen()));
@@ -175,10 +180,6 @@ class _StaffDashboardState extends State<StaffDashboard> {
     );
   }
 
-  // ---------------------------------------------------------
-  // HEADER
-  // ---------------------------------------------------------
-
   Widget _header() {
     final scheme = Theme.of(context).colorScheme;
     if (_loadingProfile) return _profileSkeleton();
@@ -228,10 +229,6 @@ class _StaffDashboardState extends State<StaffDashboard> {
     );
   }
 
-  // ---------------------------------------------------------
-  // ATTENTION BANNER
-  // ---------------------------------------------------------
-
   Widget _statusBanner(_StaffSummary s) {
     final bool hasOverdue = s.overdue > 0;
     final bool allClear = s.overdue == 0 && s.pending == 0 && s.dueToday == 0;
@@ -254,7 +251,9 @@ class _StaffDashboardState extends State<StaffDashboard> {
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
-          onTap: hasOverdue ? () => _open(const SearchReservationsScreen()) : null,
+          onTap: hasOverdue
+              ? () => _open(const SearchReservationsScreen())
+              : null,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
@@ -280,10 +279,6 @@ class _StaffDashboardState extends State<StaffDashboard> {
     );
   }
 
-  // ---------------------------------------------------------
-  // AT A GLANCE
-  // ---------------------------------------------------------
-
   Widget _glanceGrid(_StaffSummary summary) {
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -299,7 +294,8 @@ class _StaffDashboardState extends State<StaffDashboard> {
               child: _GlanceTile(
                 label: 'Pending',
                 value: summary.pending,
-                caption: summary.pending == 0 ? 'All caught up' : 'Needs review',
+                caption:
+                    summary.pending == 0 ? 'All caught up' : 'Needs review',
                 icon: Icons.pending_actions_outlined,
                 color: AppTheme.statusPending,
                 emphasize: summary.pending > 0,
@@ -397,10 +393,6 @@ class _StaffDashboardState extends State<StaffDashboard> {
       ),
     );
   }
-
-  // ---------------------------------------------------------
-  // WORKSPACE
-  // ---------------------------------------------------------
 
   Widget _workspaceCard(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -564,10 +556,6 @@ class _StaffDashboardState extends State<StaffDashboard> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Small UI helpers
-// ---------------------------------------------------------------------------
-
 class _GlanceTile extends StatelessWidget {
   const _GlanceTile({
     required this.label,
@@ -585,8 +573,6 @@ class _GlanceTile extends StatelessWidget {
   final IconData icon;
   final Color color;
   final VoidCallback onTap;
-
-  /// Tints the card when the number needs attention.
   final bool emphasize;
 
   @override

@@ -8,6 +8,7 @@ import '../../services/laboratory_service.dart';
 import '../../services/reservation_service.dart';
 import '../../features/reservations/domain/reservation_repository.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/app_feedback.dart';
 
 class NewReservationScreen extends StatefulWidget {
   final String? preselectedLaboratoryId;
@@ -23,7 +24,6 @@ class NewReservationScreen extends StatefulWidget {
   State<NewReservationScreen> createState() => _NewReservationScreenState();
 }
 
-/// One row in the "Items to reserve" list.
 class _DraftItem {
   final EquipmentType type;
   int quantity;
@@ -47,14 +47,14 @@ class _NewReservationScreenState extends State<NewReservationScreen> {
   List<EquipmentType> _typesForLab = [];
   Laboratory? _selectedLab;
 
-  /// Working item currently being added (dropdown + quantity picker).
   EquipmentType? _pendingType;
   int _pendingQuantity = 1;
 
-  /// Items the student has already added to this reservation.
   final List<_DraftItem> _items = [];
 
   DateTime? _useDate;
+  TimeOfDay? _startTime;
+  TimeOfDay? _endTime;
 
   bool _loading = true;
   bool _loadingTypes = false;
@@ -94,8 +94,10 @@ class _NewReservationScreenState extends State<NewReservationScreen> {
       }
     } catch (e) {
       if (!mounted) return;
+      // ignore: avoid_print
+      print('📋 [new-reservation] load labs failed: $e');
       setState(() {
-        _error = 'Failed to load laboratories: $e';
+        _error = 'Could not load laboratories. Please try again.';
         _loading = false;
       });
     }
@@ -131,8 +133,10 @@ class _NewReservationScreenState extends State<NewReservationScreen> {
       });
     } catch (e) {
       if (!mounted) return;
+      // ignore: avoid_print
+      print('📋 [new-reservation] load types failed: $e');
       setState(() {
-        _error = 'Failed to load equipment: $e';
+        _error = 'Could not load equipment. Please try again.';
         _loadingTypes = false;
       });
     }
@@ -156,6 +160,7 @@ class _NewReservationScreenState extends State<NewReservationScreen> {
       initialDate: _useDate ?? now,
       firstDate: now,
       lastDate: now.add(const Duration(days: 365)),
+      helpText: 'Select date of use',
     );
     if (picked != null) {
       setState(() {
@@ -166,13 +171,110 @@ class _NewReservationScreenState extends State<NewReservationScreen> {
     }
   }
 
+  String _fmt24(TimeOfDay t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+  String _fmtDisplay(TimeOfDay t) {
+    final h = t.hourOfPeriod == 0 ? 12 : t.hourOfPeriod;
+    final m = t.minute.toString().padLeft(2, '0');
+    final period = t.period == DayPeriod.am ? 'AM' : 'PM';
+    return '$h:$m $period';
+  }
+
+  void _syncTimeText() {
+    if (_startTime != null && _endTime != null) {
+      _timeController.text = '${_fmt24(_startTime!)}-${_fmt24(_endTime!)}';
+    } else if (_startTime != null) {
+      _timeController.text = _fmt24(_startTime!);
+    } else if (_endTime != null) {
+      _timeController.text = _fmt24(_endTime!);
+    } else {
+      _timeController.text = '';
+    }
+  }
+
+  Future<void> _pickTime({required bool isStart}) async {
+    final fallbackStart = const TimeOfDay(hour: 8, minute: 0);
+    final fallbackEnd = _startTime != null
+        ? TimeOfDay(hour: (_startTime!.hour + 1) % 24, minute: 0)
+        : const TimeOfDay(hour: 9, minute: 0);
+
+    final initial = isStart
+        ? (_startTime ?? fallbackStart)
+        : (_endTime ?? fallbackEnd);
+
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: initial,
+      helpText: isStart ? 'Select start time' : 'Select end time',
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+        child: child!,
+      ),
+    );
+    if (picked == null) return;
+
+    setState(() {
+      if (isStart) {
+        _startTime = picked;
+        if (_endTime != null) {
+          final startMin = picked.hour * 60 + picked.minute;
+          final endMin = _endTime!.hour * 60 + _endTime!.minute;
+          if (endMin <= startMin) {
+            _endTime = TimeOfDay(
+              hour: (picked.hour + 1) % 24,
+              minute: picked.minute,
+            );
+          }
+        }
+      } else {
+        _endTime = picked;
+        if (_startTime != null) {
+          final startMin = _startTime!.hour * 60 + _startTime!.minute;
+          final endMin = picked.hour * 60 + picked.minute;
+          if (startMin >= endMin) {
+            _startTime = TimeOfDay(
+              hour: (picked.hour - 1 + 24) % 24,
+              minute: picked.minute,
+            );
+          }
+        }
+      }
+      _syncTimeText();
+    });
+  }
+
+  void _clearTime() {
+    setState(() {
+      _startTime = null;
+      _endTime = null;
+      _timeController.text = '';
+    });
+  }
+
+  String _durationLabel() {
+    if (_startTime == null && _endTime == null) return '';
+    if (_startTime == null || _endTime == null) {
+      return 'Add the other time to see the duration.';
+    }
+    final startMin = _startTime!.hour * 60 + _startTime!.minute;
+    final endMin = _endTime!.hour * 60 + _endTime!.minute;
+    final diff = endMin - startMin;
+    if (diff <= 0) return '';
+    final h = diff ~/ 60;
+    final m = diff % 60;
+    final parts = <String>[];
+    if (h > 0) parts.add('${h}h');
+    if (m > 0) parts.add('${m}m');
+    return 'Duration: ${parts.join(' ')}';
+  }
+
   void _addItem() {
     if (_pendingType == null) {
-      setState(() => _error = 'Please choose an equipment type first.');
+      AppFeedback.info(context, 'Pick an equipment type first.');
       return;
     }
 
-    // If already added, just bump quantity.
     final existingIndex =
         _items.indexWhere((i) => i.type.id == _pendingType!.id);
 
@@ -188,10 +290,34 @@ class _NewReservationScreenState extends State<NewReservationScreen> {
       _pendingQuantity = 1;
       _error = null;
     });
+
+    AppFeedback.success(
+      context,
+      'Added to list · ${_items.length} '
+      '${_items.length == 1 ? 'item' : 'items'}',
+    );
   }
 
   void _removeItem(int index) {
+    final removed = _items[index].type.name;
     setState(() => _items.removeAt(index));
+    AppFeedback.info(context, 'Removed $removed from list.');
+  }
+
+  String _friendlyError(Object e) {
+    final s = e.toString();
+    if (s.contains('violates row-level security')) {
+      return 'You do not have permission to submit this reservation.';
+    }
+    if (s.contains('duplicate key')) {
+      return 'This reservation was already submitted.';
+    }
+    if (s.contains('network') ||
+        s.contains('SocketException') ||
+        s.contains('Failed host lookup')) {
+      return 'Network error. Please check your connection and try again.';
+    }
+    return 'Could not submit your reservation. Please try again.';
   }
 
   Future<void> _submit() async {
@@ -215,10 +341,6 @@ class _NewReservationScreenState extends State<NewReservationScreen> {
     });
 
     try {
-      // Build ReservationItem objects for the service.
-      // The service only needs equipmentTypeId + quantityRequested.
-      // We reuse the ReservationItem class; id/reservationId are filled
-      // with placeholders because the DB generates them.
       final items = _items
           .map((d) => ReservationItem(
                 id: '',
@@ -247,17 +369,25 @@ class _NewReservationScreenState extends State<NewReservationScreen> {
       );
 
       if (!mounted) return;
+
+      // ✅ Success toast BEFORE popping — visible on whichever screen
+      //    the student lands on (My Reservations or Browse Equipment).
+      AppFeedback.success(
+        context,
+        'Reservation submitted · ${_items.length} '
+        '${_items.length == 1 ? 'item' : 'items'} · Waiting for staff approval',
+      );
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
+      // ignore: avoid_print
+      print('📋 [new-reservation] submit failed: $e');
       setState(() {
         _saving = false;
-        _error = 'Failed to submit: $e';
+        _error = _friendlyError(e);
       });
     }
   }
-
-  // ───────────────────────── Build ─────────────────────────
 
   static const _pageBg = Color(0xFFF6F5F4);
 
@@ -358,8 +488,6 @@ class _NewReservationScreenState extends State<NewReservationScreen> {
     );
   }
 
-  // ───────────────────────── Shared pieces ─────────────────────────
-
   InputDecoration _dec(
     String label, {
     IconData? icon,
@@ -410,7 +538,7 @@ class _NewReservationScreenState extends State<NewReservationScreen> {
               Icon(icon, size: 20, color: AppTheme.maroon),
               const SizedBox(width: 8),
               Expanded(child: _sectionHeading(title)),
-              if (trailing != null) trailing,
+              ?trailing,
             ],
           ),
           const SizedBox(height: 14),
@@ -444,8 +572,6 @@ class _NewReservationScreenState extends State<NewReservationScreen> {
       ),
     );
   }
-
-  // ───────────────────────── Sections ─────────────────────────
 
   Widget _labField() {
     return DropdownButtonFormField<Laboratory>(
@@ -691,17 +817,7 @@ class _NewReservationScreenState extends State<NewReservationScreen> {
         validator: (v) => _useDate == null ? 'Required' : null,
       ),
       const SizedBox(height: 14),
-      TextFormField(
-        controller: _timeController,
-        enabled: !_saving,
-        keyboardType: TextInputType.datetime,
-        textInputAction: TextInputAction.next,
-        decoration: _dec(
-          'Time of use',
-          icon: Icons.access_time_outlined,
-          hint: 'e.g. 13:00-15:00',
-        ),
-      ),
+      _timeRow(),
       const SizedBox(height: 14),
       TextFormField(
         controller: _notesController,
@@ -713,7 +829,114 @@ class _NewReservationScreenState extends State<NewReservationScreen> {
     ];
   }
 
-  // ───────────────────────── Bottom bar ─────────────────────────
+  Widget _timeRow() {
+    final hasAnyTime = _startTime != null || _endTime != null;
+
+    final List<Widget> columnChildren = <Widget>[
+      Row(
+        children: [
+          Expanded(
+            child: _timeField(
+              icon: Icons.access_time_outlined,
+              label: 'Start time',
+              value: _startTime,
+              onTap: () => _pickTime(isStart: true),
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 8),
+            child: Text(
+              'to',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.black45,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Expanded(
+            child: _timeField(
+              icon: null,
+              label: 'End time',
+              value: _endTime,
+              onTap: () => _pickTime(isStart: false),
+            ),
+          ),
+        ],
+      ),
+    ];
+
+    if (hasAnyTime) {
+      columnChildren.add(const SizedBox(height: 6));
+      columnChildren.add(
+        Row(
+          children: [
+            Icon(
+              Icons.timelapse,
+              size: 14,
+              color: Colors.black.withValues(alpha: 0.5),
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                _durationLabel(),
+                style: const TextStyle(fontSize: 12, color: Colors.black54),
+              ),
+            ),
+            TextButton.icon(
+              onPressed: _saving ? null : _clearTime,
+              icon: const Icon(Icons.clear, size: 16),
+              label: const Text('Clear'),
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.black54,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: const Size(0, 32),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
+          ],
+        ),
+      );
+    } else {
+      columnChildren.add(
+        const Padding(
+          padding: EdgeInsets.only(top: 6),
+          child: Text(
+            'Optional. Leave blank if unsure.',
+            style: TextStyle(fontSize: 12, color: Colors.black45),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: columnChildren,
+    );
+  }
+
+  Widget _timeField({
+    required IconData? icon,
+    required String label,
+    required TimeOfDay? value,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: _saving ? null : onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: InputDecorator(
+        decoration: _dec(label, icon: icon),
+        child: Text(
+          value != null ? _fmtDisplay(value) : 'Tap to pick',
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: value != null ? FontWeight.w600 : FontWeight.w400,
+            color: value != null ? Colors.black87 : Colors.black38,
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _bottomBar() {
     return Material(
@@ -727,8 +950,6 @@ class _NewReservationScreenState extends State<NewReservationScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Errors live next to the submit button so they are never
-              // scrolled out of view.
               if (_error != null)
                 Container(
                   margin: const EdgeInsets.only(bottom: 10),

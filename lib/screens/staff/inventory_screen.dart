@@ -6,14 +6,13 @@ import '../../models/laboratory.dart';
 import '../../services/inventory_service.dart';
 import '../../services/laboratory_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/app_feedback.dart';
 import '../../widgets/app_components.dart';
 import '../../widgets/borrow_log_app_bar.dart';
 import '../../widgets/borrow_log_states.dart';
 import 'add_equipment_type_screen.dart';
 import 'add_equipment_asset_screen.dart';
 
-/// Status -> color mapping used for dots / progress bars in this screen.
-/// (Chips still use BorrowLogStatusChip so the rest of the app stays consistent.)
 Color _statusColor(String status) {
   switch (status) {
     case 'available':
@@ -52,7 +51,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
   bool _selectMode = false;
   final Set<String> _selected = {};
 
-  // UI-only state: which equipment types show their full unit list.
   final Set<String> _showAllUnits = {};
   static const _unitPreviewCount = 5;
 
@@ -127,9 +125,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     if (!mounted) return;
 
     if (allTypes.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Add an equipment type first.')),
-      );
+      AppFeedback.info(context, 'Add an equipment type first.');
       return;
     }
 
@@ -144,7 +140,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
     if (created == true && mounted) await _refresh();
   }
 
-  /// Shared destructive confirmation dialog.
   Future<bool> _confirmDelete({
     required String title,
     required String message,
@@ -191,11 +186,13 @@ class _InventoryScreenState extends State<InventoryScreen> {
     try {
       await _service.deleteType(type.id);
       if (!mounted) return;
+      AppFeedback.success(context, 'Type "${type.name}" deleted');
       await _refresh();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Delete failed: $e')));
+      // ignore: avoid_print
+      print('📋 [inventory] delete type failed: $e');
+      AppFeedback.error(context, 'Could not delete type. Please try again.');
     }
   }
 
@@ -249,15 +246,17 @@ class _InventoryScreenState extends State<InventoryScreen> {
     try {
       await _service.bulkUpdateStatus(assetIds: ids, status: newStatus);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Updated ${ids.length} asset(s).')),
+      AppFeedback.success(
+        context,
+        '${ids.length} asset${ids.length == 1 ? '' : 's'} updated to ${_cap(newStatus)}',
       );
       _exitSelectMode();
       await _refresh();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Update failed: $e')));
+      // ignore: avoid_print
+      print('📋 [inventory] bulk status failed: $e');
+      AppFeedback.error(context, 'Could not update status. Please try again.');
     }
   }
 
@@ -277,15 +276,17 @@ class _InventoryScreenState extends State<InventoryScreen> {
     try {
       await _service.bulkDeleteAssets(ids);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Deleted ${ids.length} asset(s).')),
+      AppFeedback.success(
+        context,
+        '${ids.length} asset${ids.length == 1 ? '' : 's'} deleted',
       );
       _exitSelectMode();
       await _refresh();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Delete failed: $e')));
+      // ignore: avoid_print
+      print('📋 [inventory] bulk delete failed: $e');
+      AppFeedback.error(context, 'Could not delete assets. Please try again.');
     }
   }
 
@@ -368,7 +369,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
   }
 
   Widget _body(_InventoryData data) {
-    // Group types by laboratory
     final Map<String, List<EquipmentType>> byLab = {};
     final Map<String, Laboratory> labById = {};
 
@@ -383,7 +383,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
       byLab.putIfAbsent(lid, () => []).add(type);
     }
 
-    // Department filter chips
     final departments = data.labs.map((l) => l.department).toSet().toList()
       ..sort();
 
@@ -403,7 +402,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
     return Align(
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
-        // Keeps the layout readable on tablets / web.
         constraints: const BoxConstraints(maxWidth: 760),
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -608,7 +606,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
         side: BorderSide(color: scheme.outlineVariant),
       ),
       child: ExpansionTile(
-        // Key changes when search toggles so results auto-expand.
         key: PageStorageKey('lab-${lab.id}-${query.isNotEmpty}'),
         initiallyExpanded: query.isNotEmpty,
         shape: const Border(),
@@ -1185,22 +1182,32 @@ class _InventoryScreenState extends State<InventoryScreen> {
       try {
         await _service.deleteAsset(asset.id);
         if (!mounted) return;
+        AppFeedback.success(
+          context,
+          'Asset ${asset.propertyNumber} deleted',
+        );
         await _refresh();
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Delete failed: $e')));
+        // ignore: avoid_print
+        print('📋 [inventory] delete asset failed: $e');
+        AppFeedback.error(context, 'Could not delete asset. Please try again.');
       }
     } else if (action.startsWith('status:')) {
       final newStatus = action.substring('status:'.length);
       try {
         await _service.updateAsset(id: asset.id, status: newStatus);
         if (!mounted) return;
+        AppFeedback.success(
+          context,
+          '${asset.propertyNumber} → ${_cap(newStatus)}',
+        );
         await _refresh();
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Update failed: $e')));
+        // ignore: avoid_print
+        print('📋 [inventory] update status failed: $e');
+        AppFeedback.error(context, 'Could not update status. Please try again.');
       }
     }
   }
@@ -1216,7 +1223,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
 }
 
 // ---------------------------------------------------------------------------
-// Small UI helpers
+// Small UI helpers (unchanged)
 // ---------------------------------------------------------------------------
 
 class _StatusDot extends StatelessWidget {

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../models/notification.dart';
 import '../../services/notification_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/app_feedback.dart';
+import '../../widgets/borrow_log_app_bar.dart';
 import '../../widgets/borrow_log_states.dart';
 import '../shared/borrower_slip_screen.dart';
 
@@ -32,14 +34,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Future<void> _markAllRead() async {
     try {
       await _service.markAllRead();
+      if (!mounted) return;
+      AppFeedback.success(context, 'All notifications marked as read');
       await _refresh();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          behavior: SnackBarBehavior.floating,
-          content: Text('Failed: $e'),
-        ),
+      // ignore: avoid_print
+      print('📋 [notifications] mark all read failed: $e');
+      AppFeedback.error(
+        context,
+        'Could not mark all as read. Please try again.',
       );
     }
   }
@@ -48,7 +52,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     if (n.isUnread) {
       try {
         await _service.markRead(n.id);
-      } catch (_) {}
+      } catch (e) {
+        // Best-effort — log silently, don't disturb the user
+        // ignore: avoid_print
+        print('📋 [notifications] mark read failed: $e');
+      }
     }
     if (!mounted) return;
 
@@ -68,8 +76,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF6F5F4),
-      appBar: AppBar(
-        title: const Text('Notifications'),
+      appBar: BorrowLogAppBar(
+        title: 'Notifications',
         actions: [
           IconButton(
             tooltip: 'Mark all as read',

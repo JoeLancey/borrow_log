@@ -7,6 +7,7 @@ import '../../services/inventory_service.dart';
 import '../../services/reservation_service.dart';
 import '../../features/reservations/domain/reservation_repository.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/app_feedback.dart';
 import '../../widgets/borrow_log_app_bar.dart';
 import '../../widgets/borrow_log_states.dart';
 import '../shared/borrower_slip_screen.dart';
@@ -56,7 +57,6 @@ class _StaffReservationsScreenState extends State<StaffReservationsScreen>
   // BUILD
   // ---------------------------------------------------------
 
-  /// Tab with a small count pill. Counts are 0 until data has loaded.
   Tab _tab(String label, int? count) {
     return Tab(
       child: Row(
@@ -147,8 +147,6 @@ class _StaffReservationsScreenState extends State<StaffReservationsScreen>
         return Scaffold(
           appBar: BorrowLogAppBar(
             title: 'Reservations',
-            // Refresh action removed — pull-to-refresh on each tab
-            // still works via RefreshIndicator.
             bottom: TabBar(
               controller: _tabController,
               isScrollable: true,
@@ -180,7 +178,6 @@ class _StaffReservationsScreenState extends State<StaffReservationsScreen>
     final scheme = Theme.of(context).colorScheme;
 
     if (items.isEmpty) {
-      // Scrollable so pull-to-refresh still works on an empty tab.
       return RefreshIndicator(
         onRefresh: _refresh,
         child: ListView(
@@ -522,9 +519,9 @@ class _StaffReservationsScreenState extends State<StaffReservationsScreen>
       available = all.where((a) => a.status == 'available').toList();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load assets: $e')),
-      );
+      // ignore: avoid_print
+      print('📋 [approve] load assets failed: $e');
+      AppFeedback.error(context, 'Could not load assets. Please try again.');
       return;
     }
 
@@ -569,15 +566,16 @@ class _StaffReservationsScreenState extends State<StaffReservationsScreen>
         assetIds: selected,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Reservation approved.')),
+      AppFeedback.success(
+        context,
+        'Reservation approved · Student notified by email',
       );
       await _refresh();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Approve failed: $e')),
-      );
+      // ignore: avoid_print
+      print('📋 [approve] failed: $e');
+      AppFeedback.error(context, 'Could not approve. Please try again.');
     }
   }
 
@@ -593,8 +591,12 @@ class _StaffReservationsScreenState extends State<StaffReservationsScreen>
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setLocal) => AlertDialog(
+          scrollable: true,
           icon: const Icon(Icons.cancel_outlined, size: 34, color: _red),
-          title: const Text('Reject reservation?', textAlign: TextAlign.center),
+          title: const Text(
+            'Reject reservation?',
+            textAlign: TextAlign.center,
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -606,7 +608,7 @@ class _StaffReservationsScreenState extends State<StaffReservationsScreen>
               const SizedBox(height: 14),
               TextField(
                 controller: controller,
-                maxLines: 3,
+                maxLines: 2,
                 textCapitalization: TextCapitalization.sentences,
                 onChanged: (_) {
                   if (showError) setLocal(() => showError = false);
@@ -655,12 +657,16 @@ class _StaffReservationsScreenState extends State<StaffReservationsScreen>
         reason: controller.text.trim(),
       );
       if (!mounted) return;
+      AppFeedback.success(
+        context,
+        'Reservation rejected · Student notified by email',
+      );
       await _refresh();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Reject failed: $e')),
-      );
+      // ignore: avoid_print
+      print('📋 [reject] failed: $e');
+      AppFeedback.error(context, 'Could not reject. Please try again.');
     }
   }
 
@@ -692,6 +698,7 @@ class _StaffReservationsScreenState extends State<StaffReservationsScreen>
             }
 
             return AlertDialog(
+              scrollable: true,
               icon: const Icon(
                 Icons.assignment_turned_in_outlined,
                 size: 34,
@@ -785,15 +792,16 @@ class _StaffReservationsScreenState extends State<StaffReservationsScreen>
         dueDate: result,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Equipment released.')),
+      AppFeedback.success(
+        context,
+        'Equipment released · Due ${_fmtDate(result)} · Student notified',
       );
       await _refresh();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Release failed: $e')),
-      );
+      // ignore: avoid_print
+      print('📋 [release] failed: $e');
+      AppFeedback.error(context, 'Could not release. Please try again.');
     }
   }
 
@@ -807,18 +815,18 @@ class _StaffReservationsScreenState extends State<StaffReservationsScreen>
       links = await _service.fetchReservationAssets(r.id);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load assets: $e')),
-      );
+      // ignore: avoid_print
+      print('📋 [return] load assets failed: $e');
+      AppFeedback.error(context, 'Could not load assets. Please try again.');
       return;
     }
 
     if (!mounted) return;
 
     if (links.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('No assets assigned to this reservation.')),
+      AppFeedback.info(
+        context,
+        'No assets assigned to this reservation yet.',
       );
       return;
     }
@@ -847,16 +855,16 @@ class _StaffReservationsScreenState extends State<StaffReservationsScreen>
       }
       await _service.completeReservation(r.id);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Return recorded. Reservation completed.')),
+      AppFeedback.success(
+        context,
+        'Return recorded · Reservation completed · Student notified',
       );
       await _refresh();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Return failed: $e')),
-      );
+      // ignore: avoid_print
+      print('📋 [return] failed: $e');
+      AppFeedback.error(context, 'Could not record return. Please try again.');
     }
   }
 }
@@ -963,13 +971,8 @@ class _AssetPickerDialogState extends State<_AssetPickerDialog> {
                         setState(() {
                           if (v == true) {
                             if (_selected.length >= needed) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content:
-                                      Text('You only need $needed unit(s).'),
-                                  duration: const Duration(seconds: 1),
-                                ),
-                              );
+                              // ignore: avoid_print
+                              print('📋 Already selected $needed unit(s).');
                               return;
                             }
                             _selected.add(a.id);
@@ -1270,4 +1273,4 @@ class _ConditionPill extends StatelessWidget {
       ),
     );
   }
-} 
+}

@@ -3,26 +3,52 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class EmailService {
   final SupabaseClient _client = Supabase.instance.client;
 
-  /// Fire-and-forget email send. Failures are swallowed.
-    Future<void> sendEmail({
+  /// Fire-and-forget email send.
+  ///
+  /// Diagnostic version — logs attempts and responses so we can see
+  /// exactly where the pipeline fails.
+  Future<void> sendEmail({
     required String to,
     required String subject,
     required String html,
     String? text,
   }) async {
+    // ignore: avoid_print
+    print('📧 [EmailService] Attempting send');
+    // ignore: avoid_print
+    print('📧 [EmailService]   to      : $to');
+    // ignore: avoid_print
+    print('📧 [EmailService]   subject : $subject');
+
     try {
-      await _client.functions.invoke(
-        'send_email',
-        body: {
-          'to': to,
-          'subject': subject,
-          'html': html,
-          // ignore: use_null_aware_elements
-          if (text != null) 'text': text,
-        },
-      );
-    } catch (_) {
-      // Email is best-effort; don't propagate.
+      final body = <String, dynamic>{
+        'to': to,
+        'subject': subject,
+        'html': html,
+      };
+      if (text != null) {
+        body['text'] = text;
+      }
+
+      final resp = await _client.functions.invoke('send_email', body: body);
+      // ignore: avoid_print
+      print('📧 [EmailService] Response status: ${resp.status}');
+      // ignore: avoid_print
+      print('📧 [EmailService] Response data  : ${resp.data}');
+
+      if (resp.status >= 400) {
+        // ignore: avoid_print
+        print('📧 [EmailService] ⚠️ Non-2xx status — email likely failed');
+      } else {
+        // ignore: avoid_print
+        print('📧 [EmailService] ✅ Success');
+      }
+    } catch (e, stack) {
+      // ignore: avoid_print
+      print('📧 [EmailService] ❌ EXCEPTION: $e');
+      // ignore: avoid_print
+      print('📧 [EmailService] STACK: $stack');
+      rethrow;
     }
   }
 

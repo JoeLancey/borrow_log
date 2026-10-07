@@ -4,6 +4,7 @@ import '../../models/college.dart';
 import '../../services/admin_service.dart';
 import '../../services/laboratory_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/app_feedback.dart';
 import '../../widgets/borrow_log_app_bar.dart';
 
 class ManageAccountsScreen extends StatefulWidget {
@@ -34,7 +35,6 @@ class _ManageAccountsScreenState extends State<ManageAccountsScreen> {
   bool _saving = false;
   bool _obscurePassword = true;
   String? _error;
-  String? _success;
 
   @override
   void initState() {
@@ -52,8 +52,10 @@ class _ManageAccountsScreenState extends State<ManageAccountsScreen> {
       });
     } catch (e) {
       if (!mounted) return;
+      // ignore: avoid_print
+      print('📋 [manage-accounts] load colleges failed: $e');
       setState(() {
-        _error = 'Failed to load colleges: $e';
+        _error = 'Could not load colleges. Please try again.';
         _loadingColleges = false;
       });
     }
@@ -78,11 +80,12 @@ class _ManageAccountsScreenState extends State<ManageAccountsScreen> {
     setState(() {
       _saving = true;
       _error = null;
-      _success = null;
     });
 
+    final email = _emailController.text.trim();
+
     final result = await _service.createUser(
-      email: _emailController.text.trim(),
+      email: email,
       password: _passwordController.text,
       fullName: _fullNameController.text.trim(),
       role: _role,
@@ -96,10 +99,13 @@ class _ManageAccountsScreenState extends State<ManageAccountsScreen> {
     if (!mounted) return;
 
     if (result.success) {
-      setState(() {
-        _saving = false;
-        _success = 'Account created: ${_emailController.text.trim()} ($_role)';
-      });
+      // ✅ Clear success toast
+      AppFeedback.success(
+        context,
+        'Account created · $email ($_role)',
+      );
+
+      // Clear the form for the next account
       _emailController.clear();
       _passwordController.clear();
       _fullNameController.clear();
@@ -107,13 +113,19 @@ class _ManageAccountsScreenState extends State<ManageAccountsScreen> {
       _courseController.clear();
       _employeeIdController.clear();
       _departmentController.clear();
-      setState(() => _selectedCollege = null);
-      // Clears leftover "Required" errors after the fields are emptied.
+      setState(() {
+        _selectedCollege = null;
+        _saving = false;
+      });
       _formKey.currentState?.reset();
     } else {
+      // Log raw error, show friendly message
+      // ignore: avoid_print
+      print('📋 [manage-accounts] create failed: ${result.errorMessage}');
       setState(() {
         _saving = false;
-        _error = result.errorMessage ?? 'Failed to create account.';
+        _error =
+            result.errorMessage ?? 'Could not create account. Please try again.';
       });
     }
   }
@@ -186,34 +198,35 @@ class _ManageAccountsScreenState extends State<ManageAccountsScreen> {
 
   Widget _gap() => const SizedBox(height: 14);
 
-  Widget _banner({
-    required Color color,
-    required IconData icon,
-    required String message,
-    required VoidCallback onClose,
-  }) {
+  /// Red error banner — kept for inline form errors.
+  Widget _errorBanner(String message) {
     return Container(
       key: ValueKey(message),
       padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.10),
+        color: Colors.red.shade700.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
+        border: Border.all(
+          color: Colors.red.shade700.withValues(alpha: 0.35),
+        ),
       ),
       child: Row(
         children: [
-          Icon(icon, color: color, size: 22),
+          Icon(Icons.error_outline, color: Colors.red.shade700, size: 22),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               message,
-              style: TextStyle(color: color, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                color: Colors.red.shade700,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
           IconButton(
             tooltip: 'Dismiss',
-            icon: Icon(Icons.close, size: 18, color: color),
-            onPressed: onClose,
+            icon: Icon(Icons.close, size: 18, color: Colors.red.shade700),
+            onPressed: () => setState(() => _error = null),
           ),
         ],
       ),
@@ -451,32 +464,16 @@ class _ManageAccountsScreenState extends State<ManageAccountsScreen> {
                       ],
                     ),
 
-                    // ---- Feedback ----
+                    // ---- Error banner (success is now a toast) ----
                     AnimatedSize(
                       duration: const Duration(milliseconds: 200),
                       alignment: Alignment.topCenter,
-                      child: Column(
-                        children: [
-                          if (_error != null) ...[
-                            const SizedBox(height: 16),
-                            _banner(
-                              color: Colors.red.shade700,
-                              icon: Icons.error_outline,
-                              message: _error!,
-                              onClose: () => setState(() => _error = null),
+                      child: _error == null
+                          ? const SizedBox(width: double.infinity)
+                          : Padding(
+                              padding: const EdgeInsets.only(top: 16),
+                              child: _errorBanner(_error!),
                             ),
-                          ],
-                          if (_success != null) ...[
-                            const SizedBox(height: 16),
-                            _banner(
-                              color: Colors.green.shade700,
-                              icon: Icons.check_circle_outline,
-                              message: _success!,
-                              onClose: () => setState(() => _success = null),
-                            ),
-                          ],
-                        ],
-                      ),
                     ),
 
                     const SizedBox(height: 24),
