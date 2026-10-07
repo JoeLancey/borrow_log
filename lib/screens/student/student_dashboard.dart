@@ -5,6 +5,7 @@ import '../../services/notification_service.dart';
 import '../../services/reservation_service.dart';
 import '../../features/reservations/domain/reservation_repository.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/app_feedback.dart';
 import '../../widgets/borrow_log_app_bar.dart';
 import '../auth/login_screen.dart';
 import 'browse_equipment_screen.dart';
@@ -43,7 +44,9 @@ class _StudentDashboardState extends State<StudentDashboard> {
           ? 'there'
           : fullName.split(RegExp(r'\s+')).first;
       setState(() {
-        _firstName = firstName.length > 18 ? '${firstName.substring(0, 17)}…' : firstName;
+        _firstName = firstName.length > 18
+            ? '${firstName.substring(0, 17)}…'
+            : firstName;
         _loadingProfile = false;
       });
     } catch (_) {
@@ -96,6 +99,9 @@ class _StudentDashboardState extends State<StudentDashboard> {
   Future<void> _logout() async {
     await AuthService().logout();
     if (!mounted) return;
+
+    // ✅ Toast shown on the login screen after navigation
+    AppFeedback.info(context, 'Signed out');
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => const LoginScreen()),
     );
@@ -238,7 +244,8 @@ class _StudentDashboardState extends State<StudentDashboard> {
                               subtitle: 'Track requests, loans, and history',
                               onTap: () => Navigator.of(context).push(
                                 MaterialPageRoute(
-                                  builder: (_) => const StudentReservationsScreen(),
+                                  builder: (_) =>
+                                      const StudentReservationsScreen(),
                                 ),
                               ),
                             ),
@@ -256,7 +263,9 @@ class _StudentDashboardState extends State<StudentDashboard> {
     );
   }
 
-  // ───────────────────────── Summary ─────────────────────────
+  // ---------------------------------------------------------
+  // Summary
+  // ---------------------------------------------------------
 
   Widget _summaryCard(_StudentSummary summary) {
     final dueText = summary.nextDue == null
@@ -423,7 +432,8 @@ class _StudentDashboardState extends State<StudentDashboard> {
     );
   }
 
-  Widget _summaryMetric(String value, String label, {required bool isHighlighted}) {
+  Widget _summaryMetric(String value, String label,
+      {required bool isHighlighted}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Column(
@@ -458,7 +468,9 @@ class _StudentDashboardState extends State<StudentDashboard> {
     );
   }
 
-  // ───────────────────────── Actions ─────────────────────────
+  // ---------------------------------------------------------
+  // Actions
+  // ---------------------------------------------------------
 
   Widget _actionCard({
     required IconData icon,

@@ -8,6 +8,7 @@ import '../../services/reservation_service.dart';
 import '../../features/reservations/domain/reservation_repository.dart';
 import '../../services/slip_pdf_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/app_feedback.dart';
 
 class BorrowerSlipScreen extends StatefulWidget {
   final String reservationId;
@@ -87,9 +88,7 @@ class _BorrowerSlipScreenState extends State<BorrowerSlipScreen> {
 
     await Clipboard.setData(ClipboardData(text: buffer.toString()));
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Slip copied to clipboard.')),
-    );
+    AppFeedback.success(context, 'Slip copied to clipboard');
   }
 
   Future<void> _printPdf(_SlipData data) async {
@@ -111,9 +110,9 @@ class _BorrowerSlipScreenState extends State<BorrowerSlipScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to generate PDF: $e')),
-      );
+      // ignore: avoid_print
+      print('📋 [borrower-slip] print failed: $e');
+      AppFeedback.error(context, 'Could not generate PDF. Please try again.');
     } finally {
       if (mounted) setState(() => _generatingPdf = false);
     }
@@ -152,33 +151,51 @@ class _BorrowerSlipScreenState extends State<BorrowerSlipScreen> {
               );
             },
           ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _refresh,
-          ),
+          // ✅ Refresh icon removed — pull down on the slip to refresh.
         ],
       ),
-      body: FutureBuilder<_SlipData?>(
-        future: _future,
-        builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snap.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text('Failed to load slip:\n${snap.error}',
-                    textAlign: TextAlign.center),
-              ),
-            );
-          }
-          final data = snap.data;
-          if (data == null) {
-            return const Center(child: Text('Reservation not found.'));
-          }
-          return _buildSlip(data);
-        },
+      body: RefreshIndicator(
+        onRefresh: _refresh,
+        color: AppTheme.maroon,
+        child: FutureBuilder<_SlipData?>(
+          future: _future,
+          builder: (context, snap) {
+            if (snap.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snap.hasError) {
+              // Wrap in a scrollable so pull-to-refresh works on error too.
+              return ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: [
+                  SizedBox(
+                    height: MediaQuery.of(context).size.height * 0.7,
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(
+                          'Failed to load slip:\n${snap.error}',
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }
+            final data = snap.data;
+            if (data == null) {
+              return ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: const [
+                  SizedBox(height: 200),
+                  Center(child: Text('Reservation not found.')),
+                ],
+              );
+            }
+            return _buildSlip(data);
+          },
+        ),
       ),
       floatingActionButton: FutureBuilder<_SlipData?>(
         future: _future,
@@ -202,6 +219,9 @@ class _BorrowerSlipScreenState extends State<BorrowerSlipScreen> {
     final r = data.reservation;
 
     return SingleChildScrollView(
+      // ✅ AlwaysScrollableScrollPhysics makes pull-to-refresh work
+      //    even when the slip content fits entirely on screen.
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
       child: Center(
         child: ConstrainedBox(
