@@ -8,6 +8,7 @@ import 'core/widgets/connectivity_banner.dart';
 import 'theme/app_theme.dart';
 import 'screens/auth/reset_password_screen.dart';
 import 'screens/auth/login_screen.dart';
+import 'screens/shared/animated_splash_screen.dart';
 import 'screens/shared/loading_screen.dart';
 import 'screens/staff/staff_dashboard.dart';
 import 'screens/student/student_dashboard.dart';
@@ -15,7 +16,6 @@ import 'services/auth_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
   final config = AppConfig.fromEnvironment();
   runApp(BorrowLogApp(config: config));
 }
@@ -34,45 +34,40 @@ class BorrowLogApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Builder(
-      builder: (context) {
-        final currentConfig = config;
-        final mediaQuery = MediaQuery.of(context);
-        return MediaQuery(
-          data: mediaQuery,
-          child: MaterialApp(
-            debugShowCheckedModeBanner: false,
-            title: 'Borrow Log',
-            theme: AppTheme.lightTheme,
-            darkTheme: AppTheme.darkTheme,
-            themeMode: ThemeMode.system,
-            builder: (context, child) => Stack(
-              children: [
-                child ?? const SizedBox.shrink(),
-                const Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  child: ConnectivityBanner(),
-                ),
-              ],
-            ),
-            home: currentConfig == null
-              ? const _AuthEntryPoint()
-              : currentConfig.isValid
-                ? _StartupGate(config: currentConfig)
-                : const _ConfigurationErrorScreen(),
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'Borrow Log',
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: ThemeMode.system,
+      builder: (context, child) => Stack(
+        children: [
+          child ?? const SizedBox.shrink(),
+          const Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: ConnectivityBanner(),
           ),
-        );
-      },
+        ],
+      ),
+      // Splash is ALWAYS the entry point.
+      home: _StartupGate(config: config),
     );
   }
 }
 
+/// Shows the animated splash first, then:
+///   1. Validates the config
+///   2. Initializes Supabase (in parallel during the splash)
+///   3. Routes to login / dashboard / error screen
+///
+/// The splash → next-screen transition is a smooth crossfade thanks
+/// to [AnimatedSwitcher] — no black gap, no white flash.
 class _StartupGate extends StatefulWidget {
-  const _StartupGate({required this.config});
+  const _StartupGate({this.config});
 
-  final AppConfig config;
+  final AppConfig? config;
 
   @override
   State<_StartupGate> createState() => _StartupGateState();
@@ -80,39 +75,103 @@ class _StartupGate extends StatefulWidget {
 
 class _StartupGateState extends State<_StartupGate> {
   Future<void>? _initialization;
+  bool _splashDone = false;
 
   @override
   void initState() {
     super.initState();
+
+    // Kick off Supabase init in parallel with the splash animation,
+    // but only if config is present and valid.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      setState(() {
-        _initialization = _initializeSupabase(widget.config);
-      });
+      final cfg = widget.config;
+      if (cfg != null && cfg.isValid) {
+        setState(() {
+          _initialization = _initializeSupabase(cfg);
+        });
+      }
     });
   }
 
   void _retry() {
+    final cfg = widget.config;
+    if (cfg == null || !cfg.isValid) return;
     setState(() {
-      _initialization = _initializeSupabase(widget.config);
+      _initialization = _initializeSupabase(cfg);
     });
+  }
+
+  /// Builds whichever screen should currently be shown. The result is
+  /// wrapped in an [AnimatedSwitcher] in [build] so each transition is
+  /// a smooth crossfade.
+  Widget _buildCurrentScreen() {
+    // 1. Splash first.
+    if (!_splashDone) {
+      return AnimatedSplashScreen(
+        key: const ValueKey('splash'),
+        onFinished: () {
+          if (!mounted) return;
+          setState(() => _splashDone = true);
+        },
+      );
+    }
+
+    // 2. Validate config.
+    final cfg = widget.config;
+    if (cfg == null || !cfg.isValid) {
+      return const KeyedSubtree(
+        key: ValueKey('config-error'),
+        child: _ConfigurationErrorScreen(),
+      );
+    }
+
+    // 3. Wait for Supabase init.
+    if (_initialization == null) {
+      return const KeyedSubtree(
+        key: ValueKey('loading-init'),
+        child: LoadingScreen(),
+      );
+    }
+
+    return FutureBuilder<void>(
+      key: const ValueKey('auth-init'),
+      future: _initialization!,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const KeyedSubtree(
+            key: ValueKey('loading-future'),
+            child: LoadingScreen(),
+          );
+        }
+        if (snapshot.hasError) {
+          return KeyedSubtree(
+            key: const ValueKey('startup-error'),
+            child: _StartupErrorScreen(onRetry: _retry),
+          );
+        }
+        return const KeyedSubtree(
+          key: ValueKey('auth-entry'),
+          child: _AuthEntryPoint(),
+        );
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_initialization == null) return const LoadingScreen();
-
-    return FutureBuilder<void>(
-      future: _initialization!,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const LoadingScreen();
-        }
-        if (snapshot.hasError) {
-          return _StartupErrorScreen(onRetry: _retry);
-        }
-        return const _AuthEntryPoint();
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 350),
+      switchInCurve: Curves.easeOut,
+      switchOutCurve: Curves.easeIn,
+      // Fade + subtle scale so the swap feels intentional.
+      transitionBuilder: (child, animation) {
+        return FadeTransition(
+          opacity: animation,
+          child: child,
+        );
       },
+      child: _buildCurrentScreen(),
     );
   }
 }
@@ -206,20 +265,20 @@ class _AuthEntryPointState extends State<_AuthEntryPoint> {
     }
   }
 
-    Future<void> _resolveSession() async {
+  Future<void> _resolveSession() async {
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) {
         if (!mounted) return;
         setState(() {
           _role = null;
-          _isRecovery = false;   
+          _isRecovery = false;
           _isResolvingSession = false;
         });
         return;
       }
 
-        final profile = await AuthService()
+      final profile = await AuthService()
           .getCurrentProfile()
           .timeout(const Duration(seconds: 8));
       final role = profile?['role'] as String?;

@@ -78,11 +78,26 @@ flutter_launcher_icons:
   remove_alpha_ios: true
 
 flutter_native_splash:
-  color: '#800000'
+  # Same maroon the animated splash starts with, so the hand-off from the
+  # native splash to the Flutter splash has no visible jump.
+  color: '#9F1225'
   image: assets/images/um-splash-logo.png
+
+  # Keep dark mode identical (otherwise some phones switch to black).
+  color_dark: '#9F1225'
+  image_dark: assets/images/um-splash-logo.png
+
+  # Android 12+ ignores the full-screen image and shows only the app icon
+  # inside a circle, so it needs its own block.
   android_12:
-    color: '#800000'
+    color: '#9F1225'
     image: assets/images/um-splash-logo.png
+    icon_background_color: '#FFFFFF'   # white disc, like the Flutter splash logo
+
   android: true
   ios: true
   web: false
+
+  android_gravity: center
+  ios_content_mode: center
+  fullscreen: true
