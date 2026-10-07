@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
@@ -29,10 +31,13 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
   Future<void> _updatePassword() async {
     if (_loading) return;
+
     final password = _passwordController.text;
     final confirmation = _confirmController.text;
+
     if (password.length < 8) {
-      setState(() => _error = 'Use at least 8 characters for your new password.');
+      setState(() =>
+          _error = 'Use at least 8 characters for your new password.');
       return;
     }
     if (password != confirmation) {
@@ -44,38 +49,63 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       _loading = true;
       _error = null;
     });
-    final result = await _authService.updateRecoveredPassword(
-      newPassword: password,
-    );
-    if (!mounted) return;
-    if (!result.success) {
+
+    try {
+      final result = await _authService
+          .updateRecoveredPassword(newPassword: password)
+          .timeout(const Duration(seconds: 20));
+
+      if (!mounted) return;
+
+      if (!result.success) {
+        setState(() {
+          _loading = false;
+          _error = result.errorMessage ?? 'Could not update your password.';
+        });
+        return;
+      }
+
+      // ✅ Show success dialog first.
+      setState(() => _loading = false);
+
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogCtx) => AlertDialog(
+          title: const Text('Password updated'),
+          content: const Text(
+            'Your password has been changed. You will be redirected to the '
+            'sign-in screen.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogCtx).pop(),
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      );
+
+      if (!mounted) return;
+
+      // ✅ Log out → the app-level auth listener will rebuild the root and
+      // show the LoginScreen automatically (see main.dart `_resolveSession`).
+      try {
+        await _authService.logout();
+      } catch (_) {}
+    } on TimeoutException {
+      if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = result.errorMessage;
+        _error = 'The request took too long. Please try again.';
       });
-      return;
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'Something went wrong. Please try again.';
+      });
     }
-
-    await _authService.logout();
-    if (!mounted) return;
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('Password updated'),
-        content: const Text(
-          'Your password has been changed. You can now sign in with your new password.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Continue'),
-          ),
-        ],
-      ),
-    ).then((_) {
-      if (mounted) setState(() {});
-    });
   }
 
   @override
@@ -102,12 +132,13 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                          const Center(child: UmBrandMark(size: 64)),
-                          const SizedBox(height: AppSpacing.xl),
-                        Text('Create a new password', style: theme.textTheme.headlineSmall),
+                        const Center(child: UmBrandMark(size: 64)),
+                        const SizedBox(height: AppSpacing.xl),
+                        Text('Create a new password',
+                            style: theme.textTheme.headlineSmall),
                         const SizedBox(height: AppSpacing.xs),
                         Text(
-                            'Choose a strong password to secure your Borrow Log account.',
+                          'Choose a strong password to secure your Borrow Log account.',
                           style: theme.textTheme.bodyMedium,
                         ),
                         const SizedBox(height: AppSpacing.xl),
@@ -118,9 +149,14 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                           obscureText: _obscurePassword,
                           enabled: !_loading,
                           suffixIcon: IconButton(
-                            tooltip: _obscurePassword ? 'Show password' : 'Hide password',
-                            icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined),
-                            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                            tooltip: _obscurePassword
+                                ? 'Show password'
+                                : 'Hide password',
+                            icon: Icon(_obscurePassword
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined),
+                            onPressed: () => setState(
+                                () => _obscurePassword = !_obscurePassword),
                           ),
                         ),
                         const SizedBox(height: AppSpacing.lg),
@@ -132,14 +168,21 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                           enabled: !_loading,
                           onSubmitted: (_) => _updatePassword(),
                           suffixIcon: IconButton(
-                            tooltip: _obscureConfirm ? 'Show password' : 'Hide password',
-                            icon: Icon(_obscureConfirm ? Icons.visibility_outlined : Icons.visibility_off_outlined),
-                            onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                            tooltip: _obscureConfirm
+                                ? 'Show password'
+                                : 'Hide password',
+                            icon: Icon(_obscureConfirm
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined),
+                            onPressed: () => setState(
+                                () => _obscureConfirm = !_obscureConfirm),
                           ),
                         ),
                         if (_error != null) ...[
                           const SizedBox(height: AppSpacing.lg),
-                          Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
+                          Text(_error!,
+                              style:
+                                  TextStyle(color: theme.colorScheme.error)),
                         ],
                         const SizedBox(height: AppSpacing.xl),
                         AppButton(

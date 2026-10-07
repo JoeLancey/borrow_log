@@ -206,13 +206,14 @@ class _AuthEntryPointState extends State<_AuthEntryPoint> {
     }
   }
 
-  Future<void> _resolveSession() async {
+    Future<void> _resolveSession() async {
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) {
         if (!mounted) return;
         setState(() {
           _role = null;
+          _isRecovery = false;   
           _isResolvingSession = false;
         });
         return;
