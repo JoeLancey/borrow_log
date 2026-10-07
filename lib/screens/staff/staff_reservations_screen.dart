@@ -147,13 +147,8 @@ class _StaffReservationsScreenState extends State<StaffReservationsScreen>
         return Scaffold(
           appBar: BorrowLogAppBar(
             title: 'Reservations',
-            actions: [
-              IconButton(
-                tooltip: 'Refresh',
-                icon: const Icon(Icons.refresh),
-                onPressed: _refresh,
-              ),
-            ],
+            // Refresh action removed — pull-to-refresh on each tab
+            // still works via RefreshIndicator.
             bottom: TabBar(
               controller: _tabController,
               isScrollable: true,
@@ -372,11 +367,8 @@ class _StaffReservationsScreenState extends State<StaffReservationsScreen>
                     ),
                     if (r.dueDateFormatted != null)
                       _infoRow(
-                        r.isOverdue
-                            ? Icons.warning_amber_rounded
-                            : Icons.schedule,
-                        'Due: ${r.dueDateFormatted}'
-                        '${r.isOverdue ? ' Â· Overdue' : ''}',
+                        Icons.schedule,
+                        'Due: ${r.dueDateFormatted}',
                         color: r.isOverdue ? _red : null,
                         bold: r.isOverdue,
                       ),
@@ -1066,10 +1058,9 @@ class _ReturnDialogState extends State<_ReturnDialog> {
 
     return AlertDialog(
       title: const Text('Receive return'),
-      // More horizontal room so the segmented button doesn't wrap.
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-      actionsPadding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
+      contentPadding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       content: SizedBox(
         width: double.maxFinite,
         child: ListView(
@@ -1088,7 +1079,6 @@ class _ReturnDialogState extends State<_ReturnDialog> {
             ...widget.links.map((link) {
               final pn = link.asset?.propertyNumber ?? link.equipmentAssetId;
               final entry = _entries[link.id]!;
-              final color = _conditionColor(entry.condition);
               return Container(
                 margin: const EdgeInsets.symmetric(vertical: 6),
                 padding: const EdgeInsets.all(14),
@@ -1098,7 +1088,8 @@ class _ReturnDialogState extends State<_ReturnDialog> {
                   border: Border.all(
                     color: entry.condition == 'good'
                         ? scheme.outlineVariant
-                        : color.withValues(alpha: 0.5),
+                        : _conditionColor(entry.condition)
+                            .withValues(alpha: 0.5),
                   ),
                 ),
                 child: Column(
@@ -1121,50 +1112,41 @@ class _ReturnDialogState extends State<_ReturnDialog> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: SegmentedButton<String>(
-                        showSelectedIcon: false,
-                        // Fill full width and split equally between segments.
-                        expandedInsets: EdgeInsets.zero,
-                        // Reduce per-segment padding so labels fit on one line.
-                        style: ButtonStyle(
-                          padding: const WidgetStatePropertyAll(
-                            EdgeInsets.symmetric(horizontal: 6, vertical: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _ConditionPill(
+                            label: 'Good',
+                            value: 'good',
+                            current: entry.condition,
+                            color: _green,
+                            onTap: () =>
+                                setState(() => entry.condition = 'good'),
                           ),
-                          textStyle: const WidgetStatePropertyAll(
-                            TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          backgroundColor:
-                              WidgetStateProperty.resolveWith((states) {
-                            return states.contains(WidgetState.selected)
-                                ? color.withValues(alpha: 0.16)
-                                : null;
-                          }),
-                          foregroundColor:
-                              WidgetStateProperty.resolveWith((states) {
-                            return states.contains(WidgetState.selected)
-                                ? color
-                                : null;
-                          }),
                         ),
-                        segments: const [
-                          ButtonSegment(value: 'good', label: Text('Good')),
-                          ButtonSegment(
-                              value: 'damaged', label: Text('Damaged')),
-                          ButtonSegment(value: 'lost', label: Text('Lost')),
-                        ],
-                        selected: {entry.condition},
-                        onSelectionChanged: (set) {
-                          setState(() {
-                            entry.condition = set.first;
-                          });
-                        },
-                      ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: _ConditionPill(
+                            label: 'Damaged',
+                            value: 'damaged',
+                            current: entry.condition,
+                            color: _amber,
+                            onTap: () =>
+                                setState(() => entry.condition = 'damaged'),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: _ConditionPill(
+                            label: 'Lost',
+                            value: 'lost',
+                            current: entry.condition,
+                            color: _red,
+                            onTap: () =>
+                                setState(() => entry.condition = 'lost'),
+                          ),
+                        ),
+                      ],
                     ),
                     if (entry.condition != 'good') ...[
                       const SizedBox(height: 12),
@@ -1202,7 +1184,6 @@ class _ReturnDialogState extends State<_ReturnDialog> {
           ],
         ),
       ),
-      // Cancel + Confirm side by side, evenly split.
       actions: [
         Row(
           children: [
@@ -1215,7 +1196,7 @@ class _ReturnDialogState extends State<_ReturnDialog> {
                 child: const Text('Cancel'),
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             Expanded(
               child: FilledButton(
                 onPressed: () => Navigator.pop(context, _entries),
@@ -1223,11 +1204,11 @@ class _ReturnDialogState extends State<_ReturnDialog> {
                   backgroundColor: AppTheme.maroon,
                   foregroundColor: Colors.white,
                   minimumSize: const Size(0, 48),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
                 ),
                 child: const Text(
-                  'Confirm return',
+                  'Confirm',
                   maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),
@@ -1237,3 +1218,56 @@ class _ReturnDialogState extends State<_ReturnDialog> {
     );
   }
 }
+
+/// Small pill used in the Receive Return dialog to pick condition.
+class _ConditionPill extends StatelessWidget {
+  final String label;
+  final String value;
+  final String current;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ConditionPill({
+    required this.label,
+    required this.value,
+    required this.current,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = value == current;
+    return Material(
+      color: selected
+          ? color.withValues(alpha: 0.16)
+          : Colors.transparent,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
+        child: Container(
+          height: 48,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: selected ? color : Colors.black26,
+              width: selected ? 1.6 : 1,
+            ),
+          ),
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: selected ? color : Colors.black87,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+} 
